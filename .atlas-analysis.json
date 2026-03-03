@@ -1,0 +1,124 @@
+{
+  "projectType": "saas",
+  "projectName": "Consensus",
+  "projectDescription": "A web-based e-voting platform supporting multiple voting methods including FPTP, STV, and Alternative Vote.",
+  "theme": "linden",
+  "primaryColor": "#2563eb",
+  "lightColor": "#3b82f6",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/voting-systems",
+              "features/voter-management",
+              "features/election-management",
+              "features/results-calculation"
+            ]
+          },
+          {
+            "group": "User Guides",
+            "pages": [
+              "guides/voter-guide",
+              "guides/admin-guide",
+              "guides/creating-elections",
+              "guides/managing-voters"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/domain-model",
+              "architecture/design-patterns",
+              "architecture/data-layer"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/configuration",
+              "deployment/security"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Services",
+            "pages": [
+              "api/services/election-service",
+              "api/services/voter-service",
+              "api/services/voting-service"
+            ]
+          },
+          {
+            "group": "Repositories",
+            "pages": [
+              "api/repositories/election-repository",
+              "api/repositories/voter-repository",
+              "api/repositories/ballot-repository"
+            ]
+          },
+          {
+            "group": "Domain Entities",
+            "pages": [
+              "api/entities/election",
+              "api/entities/voter",
+              "api/entities/ballot",
+              "api/entities/candidate"
+            ]
+          },
+          {
+            "group": "Voting Strategies",
+            "pages": [
+              "api/strategies/fptp-strategy",
+              "api/strategies/stv-strategy",
+              "api/strategies/av-strategy"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multiple voting systems (FPTP, STV, Alternative Vote)",
+    "Voter registration and approval workflow",
+    "Admin election management dashboard",
+    "Automated election scheduling",
+    "Anonymous ballot casting",
+    "Tie resolution mechanism",
+    "Audit logging and event tracking",
+    "Maintenance mode and system settings"
+  ],
+  "publicApiSurface": [
+    "ElectionService.createElection",
+    "ElectionService.startElection",
+    "ElectionService.closeElection",
+    "VoterService.registerVoter",
+    "VoterService.approveVoter",
+    "VotingService.castBallot",
+    "VotingService.getResults",
+    "FPTPStrategy.calculateResults",
+    "STVStrategy.calculateResults",
+    "AVStrategy.calculateResults",
+    "ElectionRepository.findAll",
+    "VoterRepository.findByEmail",
+    "BallotRepository.save"
+  ]
+}
