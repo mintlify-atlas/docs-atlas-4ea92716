@@ -1,0 +1,154 @@
+---
+title: "FPTP Strategy"
+description: "First Past The Post voting strategy implementation for simple plurality elections"
+---
+
+# FPTPStrategy
+
+The `FPTPStrategy` class implements the **First Past The Post** (FPTP) voting system, also known as simple plurality voting. In this system, voters select a single candidate, and the candidate with the most votes wins.
+
+## Algorithm
+
+FPTP uses a simple counting mechanism:
+1. Count the number of votes each candidate receives
+2. Sort candidates by vote count in descending order
+3. The candidate with the most votes is declared the winner
+4. If multiple candidates are tied for the top position, the tie is flagged for manual resolution
+
+## Interface
+
+### calculateResults
+
+Calculates election results using the FPTP mechanism.
+
+<ParamField path="ballots" type="Ballot[]" required>
+  Array of all ballots cast in the election. Each ballot must contain a single candidate ID in its preferences array.
+</ParamField>
+
+<ParamField path="candidates" type="Candidate[]" required>
+  Array of all candidates participating in the election.
+</ParamField>
+
+<ResponseField name="results" type="VoteResult[]">
+  Ordered array of vote results, sorted by vote count (descending). Each result contains:
+  
+  <ResponseField name="candidateID" type="string">
+    Unique identifier of the candidate
+  </ResponseField>
+  
+  <ResponseField name="candidateName" type="string">
+    Display name of the candidate
+  </ResponseField>
+  
+  <ResponseField name="votes" type="number">
+    Total number of votes received
+  </ResponseField>
+  
+  <ResponseField name="percentage" type="number">
+    Percentage of total votes (0-100)
+  </ResponseField>
+  
+  <ResponseField name="isWinner" type="boolean">
+    True if this candidate won the election. False if tied or lost.
+  </ResponseField>
+  
+  <ResponseField name="isTied" type="boolean" optional>
+    True if multiple candidates are tied for first place. When true, isWinner will be false.
+  </ResponseField>
+</ResponseField>
+
+#### Example
+
+```typescript
+const strategy = new FPTPStrategy();
+
+const candidates = [
+  new Candidate('c1', 'e1', 'Alice Johnson', 'Progressive Party', 'Bio'),
+  new Candidate('c2', 'e1', 'Bob Smith', 'Conservative Party', 'Bio'),
+  new Candidate('c3', 'e1', 'Carol White', 'Independent', 'Bio')
+];
+
+const ballots = [
+  new Ballot('b1', 'e1', ['c1']), // Vote for Alice
+  new Ballot('b2', 'e1', ['c1']), // Vote for Alice
+  new Ballot('b3', 'e1', ['c1']), // Vote for Alice
+  new Ballot('b4', 'e1', ['c2']), // Vote for Bob
+  new Ballot('b5', 'e1', ['c2']), // Vote for Bob
+  new Ballot('b6', 'e1', ['c3'])  // Vote for Carol
+];
+
+const results = strategy.calculateResults(ballots, candidates);
+
+// Results:
+// [
+//   { candidateID: 'c1', candidateName: 'Alice Johnson', votes: 3, percentage: 50, isWinner: true },
+//   { candidateID: 'c2', candidateName: 'Bob Smith', votes: 2, percentage: 33.33, isWinner: false },
+//   { candidateID: 'c3', candidateName: 'Carol White', votes: 1, percentage: 16.67, isWinner: false }
+// ]
+```
+
+### validateBallot
+
+Validates that a ballot is properly formed for FPTP voting.
+
+<ParamField path="ballot" type="Ballot" required>
+  The ballot to validate
+</ParamField>
+
+<ParamField path="candidateCount" type="number" required>
+  Number of candidates in the election (not used in FPTP validation)
+</ParamField>
+
+<ResponseField name="valid" type="boolean">
+  Returns `true` if the ballot contains exactly one candidate preference, `false` otherwise.
+</ResponseField>
+
+#### Validation Rules
+
+- The ballot must have a preferences array
+- The preferences array must contain exactly **one** candidate ID
+- Multiple selections or empty ballots are invalid
+
+#### Example
+
+```typescript
+const strategy = new FPTPStrategy();
+
+// Valid ballot
+const validBallot = new Ballot('b1', 'e1', ['c1']);
+strategy.validateBallot(validBallot, 3); // true
+
+// Invalid: multiple preferences
+const invalidBallot = new Ballot('b2', 'e1', ['c1', 'c2']);
+strategy.validateBallot(invalidBallot, 3); // false
+
+// Invalid: empty preferences
+const emptyBallot = new Ballot('b3', 'e1', []);
+strategy.validateBallot(emptyBallot, 3); // false
+```
+
+## Tie Handling
+
+When multiple candidates receive the same highest number of votes:
+- All tied candidates have `isTied: true`
+- All tied candidates have `isWinner: false`
+- The tie must be resolved manually by election administrators
+
+```typescript
+const ballots = [
+  new Ballot('b1', 'e1', ['c1']),
+  new Ballot('b2', 'e1', ['c1']),
+  new Ballot('b3', 'e1', ['c2']),
+  new Ballot('b4', 'e1', ['c2'])
+];
+
+const results = strategy.calculateResults(ballots, candidates);
+
+// Both c1 and c2 tied with 2 votes each:
+// results[0] = { ..., votes: 2, isWinner: false, isTied: true }
+// results[1] = { ..., votes: 2, isWinner: false, isTied: true }
+```
+
+## Implementation Location
+
+Source: `~/workspace/source/src/services/strategies/FPTPStrategy.ts:6-53`

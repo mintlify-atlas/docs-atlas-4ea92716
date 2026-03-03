@@ -1,0 +1,215 @@
+---
+title: "Ballot"
+description: "Immutable domain entity representing a cast ballot with voter privacy protection"
+---
+
+## Overview
+
+The `Ballot` class is a domain entity that represents a cast ballot in the Consensus e-voting platform. It is designed with immutability and privacy in mind, containing no voter-identifying information to ensure ballot secrecy.
+
+## Constructor
+
+```typescript
+new Ballot(
+  ballotID: string,
+  electionID: string,
+  preferences: string[],
+  castAt?: Date
+)
+```
+
+<ParamField path="ballotID" type="string" required>
+  Unique identifier for the ballot
+</ParamField>
+
+<ParamField path="electionID" type="string" required>
+  ID of the election this ballot belongs to
+</ParamField>
+
+<ParamField path="preferences" type="string[]" required>
+  Array of candidate IDs representing voter preferences.
+  
+  - For FPTP (First Past The Post): Single candidate ID
+  - For preferential voting (STV, AV): Ordered array of candidate IDs (first = most preferred)
+</ParamField>
+
+<ParamField path="castAt" type="Date" default="new Date()">
+  Timestamp when the ballot was cast. Defaults to current date if not specified.
+</ParamField>
+
+### Examples
+
+**FPTP Ballot (single preference):**
+
+```typescript
+const fptp = new Ballot(
+  "fptp-ballot",
+  "election-1",
+  ["candidate-A"]
+);
+```
+
+**Preferential Ballot (multiple preferences):**
+
+```typescript
+const preferential = new Ballot(
+  "pref-ballot",
+  "election-2",
+  ["candidate-A", "candidate-B", "candidate-C"]
+);
+```
+
+## Properties
+
+All properties are **readonly** and publicly accessible, ensuring ballot immutability after creation.
+
+<ResponseField name="ballotID" type="string" required>
+  Unique identifier for the ballot (readonly)
+</ResponseField>
+
+<ResponseField name="electionID" type="string" required>
+  ID of the election this ballot belongs to (readonly)
+</ResponseField>
+
+<ResponseField name="preferences" type="string[]" required>
+  Array of candidate IDs in preference order (readonly)
+  
+  - Index 0 = first preference (most preferred)
+  - Index 1 = second preference
+  - And so on...
+</ResponseField>
+
+<ResponseField name="castAt" type="Date" required>
+  Timestamp when the ballot was cast (readonly)
+</ResponseField>
+
+## Methods
+
+### isFor()
+
+Checks if the ballot includes a vote for a specific candidate.
+
+```typescript
+isFor(candidateID: string): boolean
+```
+
+<ParamField path="candidateID" type="string" required>
+  The candidate ID to check
+</ParamField>
+
+**Returns:** `true` if the candidate ID appears anywhere in the preferences array.
+
+**Example:**
+
+```typescript
+const ballot = new Ballot(
+  "b3",
+  "e1",
+  ["candidate-A", "candidate-B", "candidate-C"]
+);
+
+ballot.isFor("candidate-A"); // true
+ballot.isFor("candidate-B"); // true
+ballot.isFor("candidate-C"); // true
+ballot.isFor("candidate-D"); // false
+```
+
+### getPreferenceRank()
+
+Returns the preference rank for a specific candidate.
+
+```typescript
+getPreferenceRank(candidateID: string): number | null
+```
+
+<ParamField path="candidateID" type="string" required>
+  The candidate ID to get the rank for
+</ParamField>
+
+**Returns:** 
+- 1-based rank (1 = first preference, 2 = second preference, etc.)
+- `null` if the candidate is not in the preferences
+
+**Example:**
+
+```typescript
+const ballot = new Ballot(
+  "rank-ballot",
+  "e1",
+  ["candidate-A", "candidate-B", "candidate-C"]
+);
+
+ballot.getPreferenceRank("candidate-A"); // 1
+ballot.getPreferenceRank("candidate-B"); // 2
+ballot.getPreferenceRank("candidate-C"); // 3
+ballot.getPreferenceRank("candidate-Z"); // null
+```
+
+## Privacy Compliance
+
+The `Ballot` entity is designed to protect voter privacy:
+
+- **No voter identification**: Does not contain `voterID` or any voter-identifying information
+- **Immutable**: All properties are readonly to prevent modification after creation
+- **Unlinkable**: Ballot ID is independent of voter ID
+
+**Privacy test from source:**
+
+```typescript
+const ballot = new Ballot("ballot-privacy", "election-1", ["candidate-1"]);
+
+// These properties exist
+expect(ballot).toHaveProperty("ballotID");
+expect(ballot).toHaveProperty("electionID");
+expect(ballot).toHaveProperty("preferences");
+
+// These properties do NOT exist (privacy protection)
+expect(ballot).not.toHaveProperty("voterID");
+expect(ballot).not.toHaveProperty("voter");
+```
+
+## Usage Examples
+
+### FPTP Election
+
+```typescript
+import { Ballot } from "./domain/entities/Ballot";
+
+// Voter selects single candidate
+const ballot = new Ballot(
+  "ballot-123",
+  "election-456",
+  ["candidate-1"]
+);
+
+console.log(ballot.preferences.length); // 1
+console.log(ballot.isFor("candidate-1")); // true
+```
+
+### Preferential Voting Election
+
+```typescript
+import { Ballot } from "./domain/entities/Ballot";
+
+// Voter ranks multiple candidates
+const ballot = new Ballot(
+  "ballot-789",
+  "election-456",
+  ["candidate-A", "candidate-B", "candidate-C"]
+);
+
+console.log(ballot.preferences.length); // 3
+console.log(ballot.getPreferenceRank("candidate-A")); // 1 (first choice)
+console.log(ballot.getPreferenceRank("candidate-B")); // 2 (second choice)
+```
+
+### Empty Ballot
+
+```typescript
+// Edge case: blank ballot
+const emptyBallot = new Ballot("empty-ballot", "e1", []);
+
+console.log(emptyBallot.preferences.length); // 0
+console.log(emptyBallot.isFor("candidate-A")); // false
+console.log(emptyBallot.getPreferenceRank("candidate-A")); // null
+```

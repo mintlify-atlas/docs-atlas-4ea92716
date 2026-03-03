@@ -1,0 +1,386 @@
+---
+title: 'Configuration'
+description: 'Configure Consensus using environment variables for different deployment scenarios'
+---
+
+## Environment Variables
+
+Consensus is configured through environment variables, making it easy to customize for different deployment environments without modifying code.
+
+### Server Configuration
+
+Control where and how the server listens for connections:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HOST` | `0.0.0.0` | Server bind address (use `0.0.0.0` for Docker) |
+| `PORT` | `3000` | HTTP server port |
+| `NODE_ENV` | (none) | Environment mode: `production`, `development`, or `test` |
+
+<CodeGroup>
+```bash Production
+HOST=0.0.0.0
+PORT=3000
+NODE_ENV=production
+```
+
+```bash Development
+HOST=127.0.0.1
+PORT=3000
+NODE_ENV=development
+```
+
+```bash Custom Port
+HOST=0.0.0.0
+PORT=8080
+NODE_ENV=production
+```
+</CodeGroup>
+
+<Note>
+  When running in Docker, always use `HOST=0.0.0.0` to allow external connections. Using `127.0.0.1` will prevent access from outside the container.
+</Note>
+
+### Session Management
+
+Secure session configuration is critical for authentication:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SESSION_SECRET` | `consensus-secret-key-change-in-production` | Secret key for signing session cookies |
+
+<Warning>
+  **CRITICAL:** The default session secret is insecure and MUST be changed in production. Use a cryptographically secure random string with at least 32 characters.
+</Warning>
+
+<Steps>
+  <Step title="Generate Secure Secret">
+    Use a secure random generator:
+    ```bash
+    # Linux/macOS
+    openssl rand -hex 32
+    
+    # Node.js
+    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+    
+    # Python
+    python3 -c "import secrets; print(secrets.token_hex(32))"
+    ```
+  </Step>
+  
+  <Step title="Set Environment Variable">
+    ```bash
+    export SESSION_SECRET="a1b2c3d4e5f6...your-generated-secret"
+    ```
+  </Step>
+  
+  <Step title="Verify Configuration">
+    Check that the server is using your custom secret by looking for warnings in the logs.
+  </Step>
+</Steps>
+
+### Session Cookie Settings
+
+The session cookie configuration is defined in `src/web/server.ts`:
+
+```typescript
+{
+  secret: config.session.secret,
+  cookieName: "consensusSessionId",
+  cookie: {
+    secure: false, // Set to true in production with HTTPS
+  }
+}
+```
+
+<Warning>
+  For production deployments with HTTPS, modify `src/web/server.ts:73` to set `secure: true`. This prevents session cookies from being transmitted over unencrypted connections.
+</Warning>
+
+### Database Configuration
+
+Configure where Consensus stores its SQLite database:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATA_DIR` | Platform-specific XDG path | Directory for database storage |
+
+<CodeGroup>
+```bash Docker (Set in Dockerfile)
+DATA_DIR=/app/data
+```
+
+```bash Custom Location
+DATA_DIR=/opt/consensus/data
+```
+
+```bash Development (Default)
+# Linux: ~/.local/share/consensus
+# macOS: ~/Library/Application Support/consensus
+# Windows: %LOCALAPPDATA%/consensus
+```
+</CodeGroup>
+
+<Note>
+  The database file is stored at `$DATA_DIR/database.sqlite`. Ensure this directory is writable by the application user.
+</Note>
+
+### Admin Defaults
+
+Control the default administrator account created on first run:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CONSENSUS_ADMIN_DEFAULT_PASSWORD` | `admin123` | Initial password for the default admin account |
+
+<Warning>
+  The default admin account is created with:
+  - **Username:** `admin`
+  - **Password:** Value of `CONSENSUS_ADMIN_DEFAULT_PASSWORD`
+  - **Must Change Password:** `true` (forced to change on first login)
+  
+  Always change this password immediately after deployment!
+</Warning>
+
+### Demo Mode Configuration
+
+Special variables for demo deployments (Dockerfile.demo):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DEMO_MODE` | `true` | Enables demo deployment mode |
+| `DB_RESET_INTERVAL_SECONDS` | `86400` | Seconds between automatic database resets (24 hours) |
+
+<CodeGroup>
+```bash 1-Hour Resets
+DEMO_MODE=true
+DB_RESET_INTERVAL_SECONDS=3600
+```
+
+```bash 12-Hour Resets
+DEMO_MODE=true
+DB_RESET_INTERVAL_SECONDS=43200
+```
+</CodeGroup>
+
+## Configuration Files
+
+### Application Config (src/config/index.ts)
+
+The main configuration file reads environment variables and provides defaults:
+
+```typescript
+export const config = {
+    server: {
+        host: process.env.HOST || "0.0.0.0",
+        port: parseInt(process.env.PORT || "3000", 10),
+    },
+    session: {
+        secret: process.env.SESSION_SECRET || "consensus-secret-key-change-in-production",
+        cookieName: "consensusSessionId",
+    },
+};
+```
+
+### Docker Environment Files
+
+Create a `.env` file for Docker deployments:
+
+```bash .env
+# Server
+HOST=0.0.0.0
+PORT=3000
+NODE_ENV=production
+
+# Security
+SESSION_SECRET=your-cryptographically-secure-secret-key-here
+CONSENSUS_ADMIN_DEFAULT_PASSWORD=your-secure-admin-password
+
+# Database
+DATA_DIR=/app/data
+```
+
+Reference it in `docker-compose.yml`:
+
+```yaml
+services:
+  consensus:
+    env_file: .env
+    # or use environment:
+    environment:
+      - HOST=${HOST}
+      - PORT=${PORT}
+      - SESSION_SECRET=${SESSION_SECRET}
+```
+
+<Warning>
+  Never commit `.env` files to version control. Add `.env*` to your `.gitignore` file.
+</Warning>
+
+## Platform-Specific Paths
+
+When `DATA_DIR` is not set, Consensus uses platform-specific XDG directories:
+
+| Platform | Default Path |
+|----------|-------------|
+| **Linux** | `~/.local/share/consensus` |
+| **macOS** | `~/Library/Application Support/consensus` |
+| **Windows** | `%LOCALAPPDATA%\consensus` |
+
+This is handled by the `env-paths` package in `src/db/connection.ts:8`:
+
+```typescript
+const dataDir = process.env.DATA_DIR || envPaths("consensus", { suffix: "" }).data;
+```
+
+## Configuration Validation
+
+### Verify Settings on Startup
+
+When the server starts, it logs important configuration:
+
+```bash
+Loading database from: /app/data/database.sqlite
+Consensus E-Voting System running on http://0.0.0.0:3000
+
+=== System Data ===
+Admins (1):
+  - admin (Administrator)
+```
+
+### Check Database Location
+
+<CodeGroup>
+```bash Direct Run
+node dist/index.js | grep "Loading database"
+```
+
+```bash Docker
+docker logs consensus 2>&1 | grep "Loading database"
+```
+</CodeGroup>
+
+### Verify Environment Variables
+
+```bash
+# Inside Docker container
+docker exec consensus env | grep -E '(HOST|PORT|SESSION_SECRET|DATA_DIR)'
+
+# Direct process
+env | grep -E '(HOST|PORT|SESSION_SECRET|DATA_DIR)'
+```
+
+## Security Best Practices
+
+<Steps>
+  <Step title="Use Strong Secrets">
+    Generate cryptographically secure random values for `SESSION_SECRET`:
+    ```bash
+    openssl rand -hex 32
+    ```
+  </Step>
+  
+  <Step title="Protect Environment Files">
+    Set restrictive permissions on `.env` files:
+    ```bash
+    chmod 600 .env
+    ```
+  </Step>
+  
+  <Step title="Use Environment-Specific Configs">
+    Maintain separate `.env` files for each environment:
+    - `.env.production`
+    - `.env.staging`
+    - `.env.development`
+  </Step>
+  
+  <Step title="Rotate Secrets Regularly">
+    Change `SESSION_SECRET` periodically. Note that this will invalidate all active sessions.
+  </Step>
+</Steps>
+
+<Warning>
+  Changing `SESSION_SECRET` will log out all users. Plan secret rotation during maintenance windows.
+</Warning>
+
+## Common Configuration Scenarios
+
+### Behind a Reverse Proxy
+
+```bash .env
+HOST=127.0.0.1
+PORT=3000
+NODE_ENV=production
+SESSION_SECRET=your-secret-key
+```
+
+Configure nginx to proxy requests:
+
+```nginx
+server {
+    listen 80;
+    server_name voting.example.com;
+    
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### Multiple Instances (Load Balancing)
+
+<Warning>
+  Consensus uses SQLite, which does not support multiple concurrent writers. For load balancing, you must use a shared filesystem with proper locking or migrate to PostgreSQL/MySQL (requires code changes).
+</Warning>
+
+### Development Environment
+
+```bash .env.development
+HOST=127.0.0.1
+PORT=3000
+NODE_ENV=development
+SESSION_SECRET=dev-secret-not-for-production
+CONSENSUS_ADMIN_DEFAULT_PASSWORD=admin123
+```
+
+## Environment Variable Reference
+
+Complete list of all environment variables:
+
+```bash .env.example
+# Server Configuration
+HOST=0.0.0.0
+PORT=3000
+NODE_ENV=production
+
+# Session Security
+SESSION_SECRET=change-this-to-a-secure-random-value
+
+# Database
+DATA_DIR=/app/data
+
+# Admin Defaults
+CONSENSUS_ADMIN_DEFAULT_PASSWORD=change-on-first-login
+
+# Demo Mode (optional)
+DEMO_MODE=false
+DB_RESET_INTERVAL_SECONDS=86400
+
+# Build (optional)
+PUPPETEER_SKIP_DOWNLOAD=true
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Deployment" icon="docker" href="/deployment/docker">
+    Deploy using Docker containers
+  </Card>
+  <Card title="Security" icon="shield" href="/deployment/security">
+    Implement security best practices
+  </Card>
+</CardGroup>

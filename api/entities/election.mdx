@@ -1,0 +1,238 @@
+---
+title: "Election"
+description: "Core domain entity representing an election with candidates, status management, and business logic"
+---
+
+## Overview
+
+The `Election` class is a core domain entity that represents an election in the Consensus e-voting platform. It encapsulates all election-related data and business logic, including candidate management, status transitions, and active state validation.
+
+## Constructor
+
+```typescript
+new Election(
+  electionID: string,
+  name: string,
+  electionType: ElectionType,
+  startDate: Date,
+  endDate: Date,
+  description: string,
+  status?: ElectionStatus
+)
+```
+
+<ParamField path="electionID" type="string" required>
+  Unique identifier for the election
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Name of the election (cannot be empty)
+</ParamField>
+
+<ParamField path="electionType" type="ElectionType" required>
+  Type of election voting system. Supported values:
+  - `ElectionType.FPTP` - First Past The Post
+  - `ElectionType.STV` - Single Transferable Vote
+  - `ElectionType.AV` - Alternative Vote
+  - `ElectionType.PREFERENTIAL` - Preferential voting
+</ParamField>
+
+<ParamField path="startDate" type="Date" required>
+  Date when the election begins
+</ParamField>
+
+<ParamField path="endDate" type="Date" required>
+  Date when the election ends
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Detailed description of the election
+</ParamField>
+
+<ParamField path="status" type="ElectionStatus" default="ElectionStatus.DRAFT">
+  Current status of the election. Defaults to `DRAFT` if not specified.
+</ParamField>
+
+### Example
+
+```typescript
+const election = new Election(
+  "election-456",
+  "Presidential Election",
+  ElectionType.STV,
+  new Date("2024-06-01"),
+  new Date("2024-06-15"),
+  "National presidential election"
+);
+```
+
+## Properties
+
+<ResponseField name="electionID" type="string" required>
+  Unique identifier for the election (read-only)
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Name of the election. Can be updated via setter with validation.
+</ResponseField>
+
+<ResponseField name="electionType" type="ElectionType" required>
+  Type of election voting system (read-only)
+</ResponseField>
+
+<ResponseField name="status" type="ElectionStatus" required>
+  Current status of the election. Can be updated via setter to transition between states.
+</ResponseField>
+
+<ResponseField name="startDate" type="Date" required>
+  Date when the election begins (read-only)
+</ResponseField>
+
+<ResponseField name="endDate" type="Date" required>
+  Date when the election ends (read-only)
+</ResponseField>
+
+<ResponseField name="description" type="string" required>
+  Detailed description of the election (read-only)
+</ResponseField>
+
+<ResponseField name="candidates" type="Candidate[]" required>
+  Array of candidates in the election. Returns a copy for encapsulation (read-only array).
+</ResponseField>
+
+## Setters
+
+### name
+
+Updates the election name with validation.
+
+```typescript
+election.name = "Updated Election Name";
+```
+
+**Validation:**
+- Throws `Error` if name is empty or contains only whitespace
+
+### status
+
+Updates the election status.
+
+```typescript
+election.status = ElectionStatus.ACTIVE;
+```
+
+**Valid transitions:**
+- `DRAFT` → `ACTIVE`
+- `ACTIVE` → `CLOSED`
+- `DRAFT` → `CLOSED`
+
+## Methods
+
+### isActive()
+
+Checks if the election is currently active.
+
+```typescript
+isActive(): boolean
+```
+
+**Returns:** `true` if the election status is `ACTIVE` and the current date is within the start and end dates.
+
+**Example:**
+
+```typescript
+const election = new Election(
+  "active-election",
+  "Active",
+  ElectionType.FPTP,
+  new Date(Date.now() - 86400000), // Yesterday
+  new Date(Date.now() + 86400000), // Tomorrow
+  "Test",
+  ElectionStatus.ACTIVE
+);
+
+election.isActive(); // true
+```
+
+### isClosed()
+
+Checks if the election is closed.
+
+```typescript
+isClosed(): boolean
+```
+
+**Returns:** `true` if the election status is `CLOSED`.
+
+### addCandidate()
+
+Adds a candidate to the election.
+
+```typescript
+addCandidate(candidate: Candidate): void
+```
+
+<ParamField path="candidate" type="Candidate" required>
+  The candidate to add to the election
+</ParamField>
+
+**Throws:** `Error` if the election status is not `DRAFT`.
+
+**Note:** Candidates can only be added to draft elections.
+
+### removeCandidate()
+
+Removes a candidate from the election by ID.
+
+```typescript
+removeCandidate(candidateID: string): void
+```
+
+<ParamField path="candidateID" type="string" required>
+  The ID of the candidate to remove
+</ParamField>
+
+**Throws:** `Error` if the election status is not `DRAFT`.
+
+**Note:** Candidates can only be removed from draft elections.
+
+### getCandidateCount()
+
+Returns the number of candidates in the election.
+
+```typescript
+getCandidateCount(): number
+```
+
+**Returns:** The total number of candidates.
+
+## Usage Example
+
+```typescript
+import { Election } from "./domain/entities/Election";
+import { ElectionType, ElectionStatus } from "./domain/enums";
+
+// Create a new election
+const election = new Election(
+  "election-123",
+  "Test Election",
+  ElectionType.FPTP,
+  new Date("2024-01-01"),
+  new Date("2024-12-31"),
+  "Test election description"
+);
+
+// Update election name
+election.name = "Updated Election Name";
+
+// Transition to active status
+election.status = ElectionStatus.ACTIVE;
+
+// Check if active
+if (election.isActive()) {
+  console.log("Election is currently active");
+}
+
+// Get candidate count
+console.log(`Total candidates: ${election.getCandidateCount()}`);
+```

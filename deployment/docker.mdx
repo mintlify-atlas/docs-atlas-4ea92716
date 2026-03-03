@@ -1,0 +1,333 @@
+---
+title: 'Docker Deployment'
+description: 'Deploy Consensus using Docker containers for production and demo environments'
+---
+
+## Overview
+
+Consensus provides Docker images for both production and demo deployments. The production image is optimized for security and performance, while the demo image includes automatic database resets for testing.
+
+## Production Deployment
+
+### Building the Image
+
+The production Dockerfile uses a multi-stage build to create a minimal, secure container:
+
+<CodeGroup>
+```bash Build Production Image
+docker build -t consensus:latest .
+```
+
+```bash Build with Custom Tag
+docker build -t consensus:v1.0.0 .
+```
+</CodeGroup>
+
+### Image Architecture
+
+The build process consists of two stages:
+
+<Steps>
+  <Step title="Build Stage">
+    Uses `node:22-alpine` with build dependencies:
+    - Python 3, make, and g++ for native modules (bcrypt, better-sqlite3)
+    - Yarn 4 via corepack
+    - Skips Puppeteer download to reduce image size
+    - Compiles TypeScript to JavaScript
+  </Step>
+  
+  <Step title="Production Stage">
+    Creates a minimal runtime image:
+    - Uses clean `node:22-alpine` base
+    - Runs as non-root user `nodejs` (UID 1001)
+    - Contains only production dependencies and compiled code
+    - Exposes port 3000
+  </Step>
+</Steps>
+
+### Running the Container
+
+<CodeGroup>
+```bash Basic Usage
+docker run -d \
+  --name consensus \
+  -p 3000:3000 \
+  -v consensus-data:/app/data \
+  consensus:latest
+```
+
+```bash With Environment Variables
+docker run -d \
+  --name consensus \
+  -p 3000:3000 \
+  -v consensus-data:/app/data \
+  -e SESSION_SECRET="your-secure-secret-key" \
+  -e CONSENSUS_ADMIN_DEFAULT_PASSWORD="secure-admin-password" \
+  consensus:latest
+```
+
+```bash Custom Port and Data Directory
+docker run -d \
+  --name consensus \
+  -p 8080:8080 \
+  -v /opt/consensus/data:/app/data \
+  -e PORT=8080 \
+  -e HOST=0.0.0.0 \
+  consensus:latest
+```
+</CodeGroup>
+
+<Warning>
+  Always mount a volume to `/app/data` to persist your database. Without this, all election data will be lost when the container stops.
+</Warning>
+
+### Docker Compose
+
+Create a `docker-compose.yml` file for easier management:
+
+```yaml docker-compose.yml
+version: '3.8'
+
+services:
+  consensus:
+    image: consensus:latest
+    container_name: consensus
+    ports:
+      - "3000:3000"
+    volumes:
+      - consensus-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - SESSION_SECRET=${SESSION_SECRET}
+      - CONSENSUS_ADMIN_DEFAULT_PASSWORD=${CONSENSUS_ADMIN_DEFAULT_PASSWORD}
+    restart: unless-stopped
+
+volumes:
+  consensus-data:
+```
+
+<Steps>
+  <Step title="Create Environment File">
+    Create a `.env` file with your secrets:
+    ```bash .env
+    SESSION_SECRET=your-very-secure-secret-key-change-this
+    CONSENSUS_ADMIN_DEFAULT_PASSWORD=admin-password-change-on-first-login
+    ```
+  </Step>
+  
+  <Step title="Start Services">
+    ```bash
+    docker-compose up -d
+    ```
+  </Step>
+  
+  <Step title="View Logs">
+    ```bash
+    docker-compose logs -f consensus
+    ```
+  </Step>
+</Steps>
+
+## Demo Deployment
+
+The demo deployment automatically resets the database at regular intervals, perfect for public demonstrations or testing.
+
+### Building the Demo Image
+
+<Steps>
+  <Step title="Build Production Image First">
+    The demo image extends the production image:
+    ```bash
+    docker build -t consensus:latest .
+    ```
+  </Step>
+  
+  <Step title="Build Demo Image">
+    ```bash
+    docker build -f Dockerfile.demo -t consensus-demo:latest .
+    ```
+  </Step>
+</Steps>
+
+### Running the Demo Container
+
+<CodeGroup>
+```bash Default (24-hour reset)
+docker run -d \
+  --name consensus-demo \
+  -p 3000:3000 \
+  -e DEMO_MODE=true \
+  consensus-demo:latest
+```
+
+```bash Custom Reset Interval
+docker run -d \
+  --name consensus-demo \
+  -p 3000:3000 \
+  -e DEMO_MODE=true \
+  -e DB_RESET_INTERVAL_SECONDS=3600 \
+  consensus-demo:latest
+```
+</CodeGroup>
+
+<Note>
+  The demo container resets the database every 86400 seconds (24 hours) by default. It automatically kills the server process, deletes the database, runs the seed script, and restarts.
+</Note>
+
+### Demo Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DEMO_MODE` | `true` | Enables demo mode |
+| `DB_RESET_INTERVAL_SECONDS` | `86400` | Database reset interval (24 hours) |
+| `PORT` | `3000` | Server port |
+| `DATA_DIR` | `/app/data` | Database storage location |
+
+## Container Management
+
+### View Logs
+
+```bash
+# Follow logs in real-time
+docker logs -f consensus
+
+# View last 100 lines
+docker logs --tail 100 consensus
+```
+
+### Access Container Shell
+
+```bash
+# Interactive shell
+docker exec -it consensus sh
+
+# Check database location
+docker exec consensus ls -lh /app/data
+```
+
+### Backup Database
+
+```bash
+# Copy database from container
+docker cp consensus:/app/data/database.sqlite ./backup-$(date +%Y%m%d).sqlite
+
+# Restore database to container
+docker cp ./backup-20260101.sqlite consensus:/app/data/database.sqlite
+docker restart consensus
+```
+
+### Update Container
+
+<Steps>
+  <Step title="Pull/Build New Image">
+    ```bash
+    docker build -t consensus:latest .
+    ```
+  </Step>
+  
+  <Step title="Stop Old Container">
+    ```bash
+    docker stop consensus
+    docker rm consensus
+    ```
+  </Step>
+  
+  <Step title="Start New Container">
+    ```bash
+    docker run -d \
+      --name consensus \
+      -p 3000:3000 \
+      -v consensus-data:/app/data \
+      -e SESSION_SECRET="your-secret" \
+      consensus:latest
+    ```
+  </Step>
+</Steps>
+
+## Security Considerations
+
+<Warning>
+  **Production Security Checklist:**
+  - Set a strong `SESSION_SECRET` (minimum 32 characters)
+  - Change the default admin password on first login
+  - Use HTTPS with a reverse proxy (nginx, Traefik)
+  - Keep the Docker image updated
+  - Restrict container network access
+  - Regularly backup the database volume
+</Warning>
+
+### Non-Root User
+
+The container runs as user `nodejs` (UID 1001, GID 1001) for security. File permissions are set during the build process to ensure the application can read/write to `/app/data`.
+
+### Read-Only Root Filesystem
+
+For additional security, you can run the container with a read-only root filesystem:
+
+```bash
+docker run -d \
+  --name consensus \
+  --read-only \
+  --tmpfs /tmp \
+  -v consensus-data:/app/data \
+  -p 3000:3000 \
+  consensus:latest
+```
+
+## Troubleshooting
+
+### Container Won't Start
+
+```bash
+# Check logs for errors
+docker logs consensus
+
+# Verify environment variables
+docker inspect consensus | grep -A 20 Env
+```
+
+### Permission Errors
+
+If you see permission errors for `/app/data`:
+
+```bash
+# Check volume permissions
+docker exec consensus ls -ld /app/data
+
+# Should show: drwxr-xr-x nodejs nodejs
+```
+
+### Database Locked
+
+If you encounter "database is locked" errors:
+
+```bash
+# Ensure only one instance is running
+docker ps | grep consensus
+
+# Check for orphaned processes
+docker exec consensus ps aux
+```
+
+### Port Already in Use
+
+```bash
+# Find process using port 3000
+lsof -i :3000
+
+# Use a different port
+docker run -d -p 8080:3000 consensus:latest
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/deployment/configuration">
+    Learn about environment variables and configuration options
+  </Card>
+  <Card title="Security" icon="shield" href="/deployment/security">
+    Implement security best practices for production
+  </Card>
+</CardGroup>

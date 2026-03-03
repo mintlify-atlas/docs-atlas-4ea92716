@@ -1,0 +1,152 @@
+---
+title: Introduction
+description: Welcome to Consensus - A secure, flexible e-voting platform supporting FPTP, STV, and Alternative Vote systems
+---
+
+## Overview
+
+Consensus is a web-based electronic voting platform built with Node.js and Fastify. It provides a complete solution for running democratic elections with multiple voting methods, voter management, and comprehensive audit trails.
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get started in minutes - from account setup to casting your first vote
+  </Card>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/installation"
+  >
+    Deploy locally, with Docker, or try it instantly in GitHub Codespaces
+  </Card>
+  <Card
+    title="Voting Systems"
+    icon="vote-yea"
+    href="/features/voting-systems"
+  >
+    Learn about FPTP, STV, and Alternative Vote
+  </Card>
+  <Card
+    title="Architecture"
+    icon="sitemap"
+    href="/architecture/overview"
+  >
+    Understand the system design and patterns
+  </Card>
+</CardGroup>
+
+## Key features
+
+### Multiple voting systems
+
+Consensus supports three different voting methods to suit various election types:
+
+- **First Past The Post (FPTP)** - Traditional single-choice voting
+- **Single Transferable Vote (STV)** - Proportional representation with ranked preferences
+- **Alternative Vote (AV)** - Ranked-choice voting for single-winner elections
+
+### Voter management
+
+- Secure voter registration with email validation
+- Admin approval workflow for voter verification
+- Guest voting support for public polls
+- GDPR-compliant account deletion
+
+### Election administration
+
+- Create and manage multiple concurrent elections
+- Scheduled start and end dates with automatic activation
+- Real-time results calculation using the Strategy pattern
+- Comprehensive audit logging with the Observer pattern
+- Tie resolution handling for close elections
+
+### Security and privacy
+
+- Bcrypt password hashing
+- Session-based authentication with secure cookies
+- Cloudflare Turnstile CAPTCHA integration
+- Ballot anonymization - votes cannot be traced to voters
+- Vote confirmation codes for voter verification
+
+## Architecture
+
+Consensus is built following software engineering best practices:
+
+<Info>
+The application uses **Dependency Injection**, **Repository Pattern**, **Strategy Pattern** for voting algorithms, and **Observer Pattern** for election events.
+</Info>
+
+### Technology stack
+
+- **Backend**: Node.js 22+, Fastify web framework
+- **Database**: SQLite with better-sqlite3
+- **Templating**: EJS views
+- **Authentication**: Session-based with @fastify/session
+- **Password Security**: bcrypt
+- **Testing**: Jest with unit and E2E tests
+
+### Project structure
+
+```
+src/
+├── controllers/     # Request handlers for routes
+├── services/        # Business logic layer
+├── repositories/    # Data access layer
+├── domain/          # Entities and enums
+├── db/              # Database connection and migrations
+└── web/             # Server setup, routes, and views
+```
+
+## Use cases
+
+Consensus is ideal for:
+
+- Student union elections
+- Club and organization voting
+- Local council elections
+- Corporate board elections
+- Community polls and surveys
+- Any democratic decision-making process
+
+## Getting started
+
+<Steps>
+  <Step title="Install Consensus">
+    Choose your preferred installation method: [local setup](/installation#local-installation), [Docker](/installation#docker), or [GitHub Codespaces](/installation#github-codespaces)
+  </Step>
+  <Step title="Seed the database">
+    Populate the system with sample data to explore features
+  </Step>
+  <Step title="Create your first election">
+    Log in as an admin and set up an election with candidates
+  </Step>
+  <Step title="Cast votes">
+    Register voters and let them participate in elections
+  </Step>
+</Steps>
+
+<Note>
+When you first start Consensus, default admin credentials are created automatically. Check the console output for login details.
+</Note>
+
+## What's next?
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start Guide"
+    icon="play"
+    href="/quickstart"
+  >
+    Follow our step-by-step guide to cast your first vote
+  </Card>
+  <Card
+    title="Installation Guide"
+    icon="server"
+    href="/installation"
+  >
+    Set up Consensus in your environment
+  </Card>
+</CardGroup>

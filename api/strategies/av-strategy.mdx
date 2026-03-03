@@ -1,0 +1,200 @@
+---
+title: "AV Strategy"
+description: "Alternative Vote (Instant Runoff) strategy with iterative elimination and preference redistribution"
+---
+
+# AVStrategy
+
+The `AVStrategy` class implements the **Alternative Vote** (AV) system, also known as Instant Runoff Voting (IRV). Voters rank candidates in order of preference, and if no candidate achieves an absolute majority, the lowest-ranked candidate is iteratively eliminated with votes redistributed until a winner emerges.
+
+## Algorithm
+
+AV uses an iterative elimination process:
+
+1. **Calculate majority threshold**: `floor(total_votes / 2) + 1`
+2. **Count first preferences**: Tally each ballot's current highest-ranked active candidate
+3. **Check for majority winner**: If any candidate has votes ≥ majority, they win
+4. **Elimination round**: If no majority winner:
+   - Eliminate the candidate with the fewest votes
+   - Redistribute their ballots to the next available preference
+   - Return to step 2
+5. **Repeat** until a candidate achieves majority or only one candidate remains
+
+## Interface
+
+### calculateResults
+
+Calculates election results using the Alternative Vote mechanism with iterative elimination.
+
+<ParamField path="ballots" type="Ballot[]" required>
+  Array of all ballots cast in the election. Each ballot contains a ranked list of candidate preferences.
+</ParamField>
+
+<ParamField path="candidates" type="Candidate[]" required>
+  Array of all candidates participating in the election.
+</ParamField>
+
+<ResponseField name="results" type="VoteResult[]">
+  Ordered array of vote results, sorted by final vote count (descending). Each result contains:
+  
+  <ResponseField name="candidateID" type="string">
+    Unique identifier of the candidate
+  </ResponseField>
+  
+  <ResponseField name="candidateName" type="string">
+    Display name of the candidate
+  </ResponseField>
+  
+  <ResponseField name="votes" type="number">
+    Final vote count in the decisive round. Eliminated candidates show their count when eliminated.
+  </ResponseField>
+  
+  <ResponseField name="percentage" type="number">
+    Percentage of total ballots based on final count (0-100)
+  </ResponseField>
+  
+  <ResponseField name="isWinner" type="boolean">
+    True if this candidate won the election (achieved majority or was last remaining)
+  </ResponseField>
+</ResponseField>
+
+#### Example
+
+```typescript
+const strategy = new AVStrategy();
+
+const candidates = [
+  new Candidate('c1', 'e1', 'Alice Johnson', 'Progressive Party', 'Bio'),
+  new Candidate('c2', 'e1', 'Bob Smith', 'Conservative Party', 'Bio'),
+  new Candidate('c3', 'e1', 'Carol White', 'Independent', 'Bio')
+];
+
+// Voters rank their preferences
+const ballots = [
+  new Ballot('b1', 'e1', ['c1', 'c2', 'c3']), // Alice > Bob > Carol
+  new Ballot('b2', 'e1', ['c1', 'c3', 'c2']), // Alice > Carol > Bob
+  new Ballot('b3', 'e1', ['c1', 'c2', 'c3']), // Alice > Bob > Carol
+  new Ballot('b4', 'e1', ['c2', 'c1', 'c3']), // Bob > Alice > Carol
+];
+
+const results = strategy.calculateResults(ballots, candidates);
+
+// Round 1 first preferences: Alice=3, Bob=1, Carol=0
+// Majority needed = floor(4/2) + 1 = 3
+// Alice achieves majority immediately
+// Results:
+// [
+//   { candidateID: 'c1', candidateName: 'Alice Johnson', votes: 3, percentage: 75, isWinner: true },
+//   { candidateID: 'c2', candidateName: 'Bob Smith', votes: 1, percentage: 25, isWinner: false },
+//   { candidateID: 'c3', candidateName: 'Carol White', votes: 0, percentage: 0, isWinner: false }
+// ]
+```
+
+#### Multi-Round Example
+
+```typescript
+const ballots = [
+  new Ballot('b1', 'e1', ['c1', 'c3']),
+  new Ballot('b2', 'e1', ['c1', 'c3']),
+  new Ballot('b3', 'e1', ['c2', 'c3']),
+  new Ballot('b4', 'e1', ['c2', 'c3']),
+  new Ballot('b5', 'e1', ['c3', 'c1']),
+];
+
+const results = strategy.calculateResults(ballots, candidates);
+
+// Round 1: Alice=2, Bob=2, Carol=1, Majority=3
+// No majority, Carol eliminated
+// Round 2: Carol's vote (b5) transfers to Alice
+// Final: Alice=3, Bob=2
+// Alice wins with majority
+```
+
+### validateBallot
+
+Validates that a ballot is properly formed for AV voting.
+
+<ParamField path="ballot" type="Ballot" required>
+  The ballot to validate
+</ParamField>
+
+<ParamField path="candidateCount" type="number" required>
+  Number of candidates in the election (not used in current validation)
+</ParamField>
+
+<ResponseField name="valid" type="boolean">
+  Returns `true` if the ballot contains valid ranked preferences without duplicates, `false` otherwise.
+</ResponseField>
+
+#### Validation Rules
+
+- The ballot must have a preferences array
+- The preferences array must not be empty
+- The preferences array must not contain duplicate candidate IDs
+- Voters may rank as few or as many candidates as they wish
+
+#### Example
+
+```typescript
+const strategy = new AVStrategy();
+
+// Valid: full ranking
+const validBallot = new Ballot('b1', 'e1', ['c1', 'c2', 'c3']);
+strategy.validateBallot(validBallot, 3); // true
+
+// Valid: partial ranking
+const partialBallot = new Ballot('b2', 'e1', ['c2', 'c1']);
+strategy.validateBallot(partialBallot, 3); // true
+
+// Invalid: duplicate preferences
+const duplicateBallot = new Ballot('b3', 'e1', ['c1', 'c1']);
+strategy.validateBallot(duplicateBallot, 3); // false
+
+// Invalid: empty preferences
+const emptyBallot = new Ballot('b4', 'e1', []);
+strategy.validateBallot(emptyBallot, 3); // false
+```
+
+## Vote Redistribution
+
+When a candidate is eliminated during counting:
+
+1. All ballots currently assigned to the eliminated candidate are redistributed
+2. Each ballot transfers to its next-ranked active candidate
+3. If the next preference is also eliminated, continue down the ranking
+4. Ballots with no remaining active preferences are exhausted (do not count)
+
+```typescript
+// Example: Bob eliminated in round 2
+const ballot = new Ballot('b1', 'e1', ['c2', 'c1', 'c3']);
+// Round 1: Counts for Bob (c2)
+// Round 2: Bob eliminated → transfers to Alice (c1)
+```
+
+## Majority Calculation
+
+The majority threshold is calculated as:
+
+```typescript
+const majority = Math.floor(totalVotes / 2) + 1;
+```
+
+For 10 votes, majority = 6. A candidate must receive at least 6 votes to win.
+
+## Exhausted Ballots
+
+Ballots become exhausted when:
+- All ranked candidates have been eliminated
+- The ballot did not rank any remaining candidates
+
+Exhausted ballots do not contribute to any candidate's count in subsequent rounds.
+
+```typescript
+const ballot = new Ballot('b1', 'e1', ['c3']); // Only ranked Carol
+// If Carol is eliminated and no other preferences exist,
+// this ballot is exhausted and excluded from further rounds
+```
+
+## Implementation Location
+
+Source: `~/workspace/source/src/services/strategies/AVStrategy.ts:6-93`

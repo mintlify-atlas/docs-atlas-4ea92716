@@ -1,0 +1,199 @@
+---
+title: Architecture Overview
+description: High-level architecture and design principles of the Consensus e-voting platform
+---
+
+## Introduction
+
+Consensus is a web-based e-voting platform built with TypeScript and Fastify. The architecture follows a **layered design** with clear separation of concerns, leveraging proven design patterns to ensure maintainability, testability, and scalability.
+
+## Architecture Layers
+
+The application follows a classic three-tier architecture:
+
+```
+┌─────────────────────────────────────────┐
+│         Presentation Layer              │
+│   (Controllers, Routes, EJS Views)      │
+└─────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│          Business Layer                 │
+│  (Services, Domain Logic, Patterns)     │
+└─────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│           Data Layer                    │
+│   (Repositories, Database, SQLite)      │
+└─────────────────────────────────────────┘
+```
+
+### 1. Presentation Layer
+
+**Technology:** Fastify web framework with EJS templating
+
+**Components:**
+- **Controllers**: Handle HTTP requests/responses, orchestrate service calls
+- **Routes**: Define URL endpoints and middleware
+- **Views**: Server-side rendered EJS templates
+
+**Key Files:**
+- `src/web/server.ts:57-263` - Main server setup and configuration
+- `src/controllers/` - Controller implementations
+- `src/web/routes/` - Route definitions
+
+### 2. Business Layer
+
+**Components:**
+- **Services**: Encapsulate business logic and orchestrate operations
+- **Domain Entities**: Core business objects with encapsulated state
+- **Design Patterns**: Strategy, Observer, Factory, Adapter patterns
+
+**Key Services:**
+- `VotingService` - Manages vote casting and result calculation
+- `ElectionService` - Handles election lifecycle and state transitions
+- `VoterService` - Manages voter registration and authentication
+
+### 3. Data Layer
+
+**Technology:** SQLite with better-sqlite3
+
+**Components:**
+- **Repositories**: Abstract data access using Repository pattern
+- **Database Connection**: Singleton pattern for connection management
+- **Migrations**: Version-controlled schema changes
+
+## Core Design Principles
+
+### Dependency Injection
+
+All dependencies are explicitly injected through constructors, enabling testability and loose coupling:
+
+```typescript
+// From src/web/server.ts:169-186
+const voterService = new VoterService(voterRepository);
+
+const electionEventEmitter = new ElectionEventEmitter();
+const auditLogger = new ElectionAuditLogger(auditLogRepository);
+const electionNotifier = new ElectionNotifier();
+electionEventEmitter.subscribe(auditLogger);
+electionEventEmitter.subscribe(electionNotifier);
+
+const electionService = new ElectionService(
+    electionRepository,
+    candidateRepository,
+    electionEventEmitter
+);
+
+const votingService = new VotingService(
+    ballotRepository,
+    eligibilityRepository,
+    confirmationRepository,
+    electionRepository,
+    candidateRepository
+);
+```
+
+### Encapsulation
+
+Domain entities use private fields with getters/setters to control access and enforce invariants:
+
+```typescript
+// From src/domain/entities/Voter.ts:3-26
+export class Voter {
+    private _voterID: string;
+    private _name: string;
+    private _email: string;
+    private _passwordHash: string;
+    private _registrationStatus: RegistrationStatus;
+    private _registrationDate: Date;
+
+    constructor(
+        voterID: string,
+        name: string,
+        email: string,
+        passwordHash: string,
+        registrationStatus: RegistrationStatus = RegistrationStatus.PENDING,
+        registrationDate: Date = new Date()
+    ) {
+        this._voterID = voterID;
+        this._name = name;
+        this._email = email;
+        this._passwordHash = passwordHash;
+        this._registrationStatus = registrationStatus;
+        this._registrationDate = registrationDate;
+    }
+}
+```
+
+### Interface Segregation
+
+Repositories implement focused interfaces defining clear contracts:
+
+```typescript
+// From src/repositories/interfaces/IVoterRepository.ts:3-10
+export interface IVoterRepository {
+    save(voter: Voter): void;
+    findById(voterID: string): Voter | null;
+    findByEmail(email: string): Voter | null;
+    update(voter: Voter): void;
+    delete(voterID: string): void;
+    findAll(): Voter[];
+}
+```
+
+## Technology Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|----------|
+| **Runtime** | Node.js | JavaScript runtime environment |
+| **Language** | TypeScript | Type-safe development |
+| **Web Framework** | Fastify | High-performance web server |
+| **Database** | SQLite (better-sqlite3) | Embedded relational database |
+| **Templates** | EJS | Server-side view rendering |
+| **Session Management** | @fastify/session | User authentication |
+| **Password Hashing** | bcrypt | Secure credential storage |
+
+## Security Considerations
+
+### Vote Anonymity
+
+The system ensures vote anonymity by separating ballot storage from voter confirmations:
+
+- **Ballots**: Stored anonymously with no voter linkage
+- **Confirmations**: Record that a voter voted, but not their choices
+- **Adapter Pattern**: `AnonymousBallotAdapter` enforces this separation
+
+### Authentication
+
+Multiple authentication mechanisms:
+- **Voter Authentication**: Email + password with session management
+- **Admin Authentication**: Username + password with role-based access
+- **Password Security**: bcrypt hashing with salt
+
+### Data Integrity
+
+- **Database Constraints**: Foreign keys and unique constraints
+- **Transaction Support**: SQLite transactions for atomic operations
+- **Audit Logging**: Observer pattern tracks all election state changes
+
+## Scalability Considerations
+
+While SQLite is suitable for small to medium deployments:
+
+**Current Scale:**
+- Designed for organizations with hundreds to thousands of voters
+- Single-server deployment model
+- In-memory session storage
+
+**Future Scalability:**
+- Repository pattern enables easy migration to PostgreSQL/MySQL
+- Service layer can be split into microservices
+- Session storage can move to Redis
+- Horizontal scaling with load balancers
+
+## Next Steps
+
+- [Domain Model](/architecture/domain-model) - Detailed entity relationships
+- [Design Patterns](/architecture/design-patterns) - Pattern implementations
+- [Data Layer](/architecture/data-layer) - Repository and database details

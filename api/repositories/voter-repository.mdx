@@ -1,0 +1,187 @@
+---
+title: "VoterRepository"
+description: "Repository for managing voter data access using SQLite"
+---
+
+## Overview
+
+The `VoterRepository` class handles all database operations for voters in the Consensus e-voting platform. It implements the `IVoterRepository` interface and uses SQLite for data persistence.
+
+## Constructor
+
+```typescript
+constructor(db?: Database.Database)
+```
+
+<ParamField path="db" type="Database.Database" optional>
+  Optional database instance. If not provided, uses the singleton DatabaseConnection instance.
+</ParamField>
+
+## Methods
+
+### save
+
+Persists a new voter to the database.
+
+```typescript
+save(voter: Voter): void
+```
+
+<ParamField path="voter" type="Voter" required>
+  The voter entity to save to the database.
+</ParamField>
+
+<ResponseField name="return" type="void">
+  No return value. Throws an error if the save operation fails.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const voter = new Voter(
+  "voter-123",
+  "John Doe",
+  "john.doe@example.com",
+  "$2b$10$hashedpassword",
+  RegistrationStatus.PENDING
+);
+
+voterRepository.save(voter);
+```
+
+### findById
+
+Retrieves a voter by their unique identifier.
+
+```typescript
+findById(voterID: string): Voter | null
+```
+
+<ParamField path="voterID" type="string" required>
+  The unique identifier of the voter to retrieve.
+</ParamField>
+
+<ResponseField name="return" type="Voter | null">
+  Returns the Voter entity if found, or null if no voter exists with the given ID.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const voter = voterRepository.findById("voter-123");
+if (voter) {
+  console.log(voter.name);
+}
+```
+
+### findByEmail
+
+Retrieves a voter by their email address.
+
+```typescript
+findByEmail(email: string): Voter | null
+```
+
+<ParamField path="email" type="string" required>
+  The email address of the voter to retrieve.
+</ParamField>
+
+<ResponseField name="return" type="Voter | null">
+  Returns the Voter entity if found, or null if no voter exists with the given email.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const voter = voterRepository.findByEmail("john.doe@example.com");
+if (voter) {
+  console.log(`Found voter: ${voter.name}`);
+}
+```
+
+### update
+
+Updates an existing voter in the database.
+
+```typescript
+update(voter: Voter): void
+```
+
+<ParamField path="voter" type="Voter" required>
+  The voter entity with updated values. The voterID must match an existing voter.
+</ParamField>
+
+<ResponseField name="return" type="void">
+  No return value. Throws an error if the update operation fails.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const voter = voterRepository.findById("voter-123");
+if (voter) {
+  voter.registrationStatus = RegistrationStatus.APPROVED;
+  voterRepository.update(voter);
+}
+```
+
+### delete
+
+Deletes a voter from the database.
+
+```typescript
+delete(voterID: string): void
+```
+
+<ParamField path="voterID" type="string" required>
+  The unique identifier of the voter to delete.
+</ParamField>
+
+<ResponseField name="return" type="void">
+  No return value. Throws an error if the delete operation fails.
+</ResponseField>
+
+**Example:**
+
+```typescript
+voterRepository.delete("voter-123");
+```
+
+### findAll
+
+Retrieves all voters from the database.
+
+```typescript
+findAll(): Voter[]
+```
+
+<ResponseField name="return" type="Voter[]">
+  Array of all voters in the database. Returns empty array if no voters exist.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const allVoters = voterRepository.findAll();
+console.log(`Total registered voters: ${allVoters.length}`);
+```
+
+## Related Types
+
+### Voter
+
+The Voter entity with the following properties:
+
+- `voterID: string` - Unique identifier
+- `name: string` - Voter's full name
+- `email: string` - Voter's email address
+- `passwordHash: string` - Hashed password for authentication
+- `registrationStatus: RegistrationStatus` - Current registration status
+- `registrationDate: Date` - Date when the voter registered
+
+### RegistrationStatus
+
+Enum with values:
+- `PENDING` - Registration is awaiting approval
+- `APPROVED` - Voter is approved and can vote
+- `SUSPENDED` - Voter account is suspended

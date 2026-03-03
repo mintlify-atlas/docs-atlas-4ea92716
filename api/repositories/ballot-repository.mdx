@@ -1,0 +1,165 @@
+---
+title: "BallotRepository"
+description: "Repository for managing ballot data access using SQLite"
+---
+
+## Overview
+
+The `BallotRepository` class handles all database operations for ballots in the Consensus e-voting platform. It implements the `IBallotRepository` interface and uses SQLite for data persistence.
+
+## Constructor
+
+```typescript
+constructor(db?: Database.Database)
+```
+
+<ParamField path="db" type="Database.Database" optional>
+  Optional database instance. If not provided, uses the singleton DatabaseConnection instance.
+</ParamField>
+
+## Methods
+
+### save
+
+Persists a new ballot to the database.
+
+```typescript
+save(ballot: Ballot): void
+```
+
+<ParamField path="ballot" type="Ballot" required>
+  The ballot entity to save to the database. Preferences are stored as JSON.
+</ParamField>
+
+<ResponseField name="return" type="void">
+  No return value. Throws an error if the save operation fails.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const ballot = new Ballot(
+  "ballot-123",
+  "elec-456",
+  ["candidate-1", "candidate-2", "candidate-3"]
+);
+
+ballotRepository.save(ballot);
+```
+
+### findById
+
+Retrieves a ballot by its unique identifier.
+
+```typescript
+findById(ballotID: string): Ballot | null
+```
+
+<ParamField path="ballotID" type="string" required>
+  The unique identifier of the ballot to retrieve.
+</ParamField>
+
+<ResponseField name="return" type="Ballot | null">
+  Returns the Ballot entity if found, or null if no ballot exists with the given ID.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const ballot = ballotRepository.findById("ballot-123");
+if (ballot) {
+  console.log(`Ballot cast at: ${ballot.castAt}`);
+}
+```
+
+### findByElectionId
+
+Retrieves all ballots for a specific election.
+
+```typescript
+findByElectionId(electionID: string): Ballot[]
+```
+
+<ParamField path="electionID" type="string" required>
+  The unique identifier of the election.
+</ParamField>
+
+<ResponseField name="return" type="Ballot[]">
+  Array of all ballots cast in the specified election. Returns empty array if no ballots found.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const ballots = ballotRepository.findByElectionId("elec-456");
+console.log(`Total ballots cast: ${ballots.length}`);
+```
+
+### countByElectionId
+
+Counts the total number of ballots cast in a specific election.
+
+```typescript
+countByElectionId(electionID: string): number
+```
+
+<ParamField path="electionID" type="string" required>
+  The unique identifier of the election.
+</ParamField>
+
+<ResponseField name="return" type="number">
+  The total count of ballots cast in the election.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const count = ballotRepository.countByElectionId("elec-456");
+console.log(`${count} ballots have been cast`);
+```
+
+### countByCandidate
+
+Counts the number of ballots where a specific candidate is the first preference.
+
+```typescript
+countByCandidate(electionID: string, candidateID: string): number
+```
+
+<ParamField path="electionID" type="string" required>
+  The unique identifier of the election.
+</ParamField>
+
+<ParamField path="candidateID" type="string" required>
+  The unique identifier of the candidate.
+</ParamField>
+
+<ResponseField name="return" type="number">
+  The count of ballots where the candidate is listed as the first preference (index 0 in the preferences array).
+</ResponseField>
+
+**Example:**
+
+```typescript
+const votes = ballotRepository.countByCandidate("elec-456", "candidate-1");
+console.log(`Candidate received ${votes} first-preference votes`);
+```
+
+## Related Types
+
+### Ballot
+
+The Ballot entity with the following properties:
+
+- `ballotID: string` - Unique identifier (readonly)
+- `electionID: string` - ID of the election this ballot belongs to (readonly)
+- `preferences: string[]` - Array of candidate IDs in preference order (readonly)
+  - For FPTP elections: single candidate ID
+  - For preferential elections: multiple candidate IDs ranked by preference
+- `castAt: Date` - Timestamp when the ballot was cast (readonly, defaults to current time)
+
+## Notes
+
+- Ballot preferences are stored as JSON in the database and parsed when retrieved
+- The `countByCandidate` method uses SQLite's `json_extract` function to query the first preference
+- All ballot properties are readonly to ensure ballot integrity after casting

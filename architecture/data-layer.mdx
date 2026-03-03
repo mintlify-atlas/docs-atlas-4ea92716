@@ -1,0 +1,690 @@
+---
+title: Data Layer
+description: Database architecture, repository pattern implementation, and data access strategies
+---
+
+## Overview
+
+The data layer uses **SQLite** with the **better-sqlite3** driver, abstracted through the **Repository pattern**. This design provides database independence while maintaining simplicity for small to medium deployments.
+
+## Database Architecture
+
+### Technology Choice: SQLite
+
+**Rationale:**
+- **Simplicity:** Zero configuration, embedded database
+- **Reliability:** ACID compliance, proven stability
+- **Performance:** Sufficient for thousands of voters
+- **Deployment:** Single file, easy backups
+- **Development:** No separate database server required
+
+**Limitations:**
+- Single-writer concurrency model
+- Limited horizontal scaling
+- Not ideal for distributed systems
+
+**Migration Path:** Repository pattern enables switching to PostgreSQL/MySQL without service layer changes.
+
+### Connection Management
+
+**Singleton Pattern:**
+```typescript
+// From src/db/connection.ts:10-28
+export class DatabaseConnection {
+    private static instance: Database.Database | null = null;
+    public static readonly DB_PATH = join(dataDir, "database.sqlite");
+
+    private constructor() {}
+
+    public static getInstance(): Database.Database {
+        if (!DatabaseConnection.instance) {
+            console.log("Loading database from:", DatabaseConnection.DB_PATH);
+
+            ensureDirSync(dirname(DatabaseConnection.DB_PATH));
+
+            DatabaseConnection.instance = new Database(DatabaseConnection.DB_PATH);
+            DatabaseConnection.instance.pragma("foreign_keys = ON");
+        }
+
+        return DatabaseConnection.instance;
+    }
+}
+```
+
+**Key Features:**
+- **Lazy Initialization:** Database connection created on first access
+- **Foreign Keys:** Enabled for referential integrity
+- **Single Connection:** All repositories share one connection (SQLite limitation)
+
+### Schema Migrations
+
+**Version-Controlled Migrations:**
+```typescript
+// From src/db/connection.ts:30-91
+public static runMigrations(): void {
+    // Create migrations tracking table
+    DatabaseConnection.instance!.exec(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+        )
+    `);
+
+    // Get applied migrations
+    const appliedMigrations = DatabaseConnection.instance!.prepare(
+        "SELECT version FROM schema_migrations ORDER BY version"
+    ).all() as { version: number }[];
+
+    const appliedVersions = new Set(appliedMigrations.map((m) => m.version));
+
+    // Read and sort migration files
+    const migrationFiles = readdirSync(DatabaseConnection.MIGRATIONS_PATH)
+        .filter((file) => file.endsWith(".sql"))
+        .sort();
+
+    console.log(`Database Migrations:`);
+    console.log(`Applied: ${appliedVersions.size}, Available: ${migrationFiles.length}`);
+
+    // Apply pending migrations
+    for (const file of migrationFiles) {
+        const version = parseInt(file.split("_")[0]);
+
+        if (appliedVersions.has(version)) {
+            console.log(`✓ Migration ${version}: ${file} (already applied)`);
+            continue;
+        }
+
+        console.log(`▶ Running migration ${version}: ${file}`);
+
+        const migrationSQL = readFileSync(
+            join(DatabaseConnection.MIGRATIONS_PATH, file), 
+            "utf-8"
+        );
+
+        try {
+            DatabaseConnection.instance!.exec(migrationSQL);
+
+            // Record migration as applied
+            DatabaseConnection.instance!.prepare(`
+                INSERT INTO schema_migrations (version, name, applied_at)
+                VALUES (?, ?, ?)
+            `).run(version, file, new Date().toISOString());
+
+            console.log(`✓ Migration ${version}: ${file} (completed)`);
+        } catch (error) {
+            console.error(`✗ Migration ${version}: ${file} (failed)`);
+            throw error;
+        }
+    }
+}
+```
+
+**Migration Naming Convention:**
+```
+001_initial_schema.sql
+002_add_audit_logs.sql
+003_add_settings_table.sql
+```
+
+**Benefits:**
+- **Repeatable Deployments:** Same migrations run in all environments
+- **Version Tracking:** Know which schema version is deployed
+- **Rollback Safety:** Migrations never re-run
+- **Team Coordination:** Avoid schema conflicts
+
+## Repository Pattern Implementation
+
+### Architecture
+
+```
+Service Layer
+      ↓
+ IRepository (interface)
+      ↓
+ ConcreteRepository (implementation)
+      ↓
+ DatabaseConnection (singleton)
+      ↓
+ SQLite Database
+```
+
+### Interface Layer
+
+Repositories implement focused interfaces:
+
+```typescript
+// From src/repositories/interfaces/IVoterRepository.ts:3-10
+export interface IVoterRepository {
+    save(voter: Voter): void;
+    findById(voterID: string): Voter | null;
+    findByEmail(email: string): Voter | null;
+    update(voter: Voter): void;
+    delete(voterID: string): void;
+    findAll(): Voter[];
+}
+```
+
+**Design Principles:**
+- **Domain-Oriented:** Methods operate on domain entities, not database rows
+- **CRUD Operations:** Standard create, read, update, delete
+- **Custom Queries:** Add domain-specific finders (e.g., `findByEmail`)
+- **Null Safety:** Return `null` when not found (explicit handling)
+
+### Concrete Implementation
+
+**Example: VoterRepository**
+
+```typescript
+// From src/repositories/VoterRepository.ts:7-28
+export class VoterRepository implements IVoterRepository {
+    private db: Database.Database;
+
+    constructor(db?: Database.Database) {
+        this.db = db || DatabaseConnection.getInstance();
+    }
+
+    save(voter: Voter): void {
+        const stmt = this.db.prepare(`
+            INSERT INTO voters (
+                voter_id, name, email, password_hash, 
+                registration_status, registration_date
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+        `);
+
+        stmt.run(
+            voter.voterID,
+            voter.name,
+            voter.email,
+            voter.passwordHash,
+            voter.registrationStatus,
+            voter.registrationDate.toISOString()
+        );
+    }
+}
+```
+
+**Find Operations:**
+```typescript
+// From src/repositories/VoterRepository.ts:30-46
+findById(voterID: string): Voter | null {
+    const stmt = this.db.prepare(`
+        SELECT * FROM voters WHERE voter_id = ?
+    `);
+
+    const row = stmt.get(voterID) as any;
+    return row ? this.mapRowToVoter(row) : null;
+}
+
+findByEmail(email: string): Voter | null {
+    const stmt = this.db.prepare(`
+        SELECT * FROM voters WHERE email = ?
+    `);
+
+    const row = stmt.get(email) as any;
+    return row ? this.mapRowToVoter(row) : null;
+}
+```
+
+### Object-Relational Mapping
+
+**Manual Mapping Approach:**
+
+Rather than using an ORM (TypeORM, Prisma), Consensus uses **manual mapping**:
+
+```typescript
+// From src/repositories/VoterRepository.ts:75-84
+private mapRowToVoter(row: any): Voter {
+    return new Voter(
+        row.voter_id,
+        row.name,
+        row.email,
+        row.password_hash,
+        row.registration_status as RegistrationStatus,
+        new Date(row.registration_date)
+    );
+}
+```
+
+**Why Manual Mapping?**
+
+| Aspect | Manual Mapping | ORM |
+|--------|----------------|-----|
+| **Learning Curve** | Minimal (just SQL) | Steep (ORM API) |
+| **Transparency** | See exact SQL | Hidden queries |
+| **Performance** | Optimal queries | May generate inefficient SQL |
+| **Flexibility** | Full SQL control | Limited to ORM features |
+| **Debugging** | Straightforward | ORM abstraction complexity |
+
+**Trade-offs Accepted:**
+- More boilerplate code
+- No automatic migrations from entity changes
+- Manual handling of relationships
+
+**Gains Achieved:**
+- No runtime ORM overhead
+- Easier to optimize queries
+- Simpler stack for small team
+
+## Database Schema
+
+### Core Tables
+
+**Voters Table:**
+```sql
+CREATE TABLE voters (
+    voter_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    registration_status TEXT NOT NULL,
+    registration_date TEXT NOT NULL
+);
+```
+
+**Elections Table:**
+```sql
+CREATE TABLE elections (
+    election_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    election_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    description TEXT
+);
+```
+
+**Candidates Table:**
+```sql
+CREATE TABLE candidates (
+    candidate_id TEXT PRIMARY KEY,
+    election_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    party TEXT,
+    biography TEXT,
+    FOREIGN KEY (election_id) REFERENCES elections(election_id)
+        ON DELETE CASCADE
+);
+```
+
+**Ballots Table (Anonymous):**
+```sql
+CREATE TABLE ballots (
+    ballot_id TEXT PRIMARY KEY,
+    election_id TEXT NOT NULL,
+    preferences TEXT NOT NULL,  -- JSON array of candidate IDs
+    cast_at TEXT NOT NULL,
+    FOREIGN KEY (election_id) REFERENCES elections(election_id)
+        ON DELETE CASCADE
+);
+```
+
+**Vote Confirmations Table:**
+```sql
+CREATE TABLE vote_confirmations (
+    confirmation_id TEXT PRIMARY KEY,
+    voter_id TEXT NOT NULL,
+    election_id TEXT NOT NULL,
+    confirmed_at TEXT NOT NULL,
+    FOREIGN KEY (voter_id) REFERENCES voters(voter_id)
+        ON DELETE CASCADE,
+    FOREIGN KEY (election_id) REFERENCES elections(election_id)
+        ON DELETE CASCADE,
+    UNIQUE(voter_id, election_id)  -- One vote per election
+);
+```
+
+**Voter Eligibility Table:**
+```sql
+CREATE TABLE voter_eligibility (
+    voter_id TEXT NOT NULL,
+    election_id TEXT NOT NULL,
+    has_voted BOOLEAN DEFAULT FALSE,
+    PRIMARY KEY (voter_id, election_id),
+    FOREIGN KEY (voter_id) REFERENCES voters(voter_id)
+        ON DELETE CASCADE,
+    FOREIGN KEY (election_id) REFERENCES elections(election_id)
+        ON DELETE CASCADE
+);
+```
+
+### Audit and Admin Tables
+
+**Audit Logs:**
+```sql
+CREATE TABLE audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    election_id TEXT NOT NULL,
+    election_name TEXT NOT NULL,
+    previous_status TEXT NOT NULL,
+    new_status TEXT NOT NULL,
+    timestamp TEXT NOT NULL
+);
+```
+
+**Admins:**
+```sql
+CREATE TABLE admins (
+    admin_id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    must_change_password BOOLEAN DEFAULT FALSE
+);
+```
+
+**Settings:**
+```sql
+CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+```
+
+## Data Access Patterns
+
+### Transaction Support
+
+SQLite supports transactions for atomic operations:
+
+```typescript
+// Example pattern (not in current codebase)
+const db = DatabaseConnection.getInstance();
+
+const transaction = db.transaction(() => {
+    // Multiple operations
+    voterRepository.save(voter);
+    eligibilityRepository.addEligibility(voter.voterID, electionID);
+});
+
+transaction(); // Execute atomically
+```
+
+**Current Usage:**
+Most operations are single-statement and don't require explicit transactions.
+
+### Prepared Statements
+
+All queries use prepared statements for security and performance:
+
+```typescript
+// Safe from SQL injection
+const stmt = this.db.prepare(`
+    SELECT * FROM voters WHERE email = ?
+`);
+const row = stmt.get(email);
+```
+
+**Benefits:**
+- **SQL Injection Prevention:** Parameters sanitized
+- **Performance:** Statement compilation cached
+- **Type Safety:** TypeScript types for parameters
+
+### Data Type Handling
+
+**SQLite Type Mappings:**
+
+| TypeScript Type | SQLite Type | Storage |
+|----------------|-------------|----------|
+| `string` | TEXT | UTF-8 string |
+| `number` | INTEGER | 64-bit integer |
+| `boolean` | INTEGER | 0 or 1 |
+| `Date` | TEXT | ISO 8601 string |
+| `enum` | TEXT | Enum value as string |
+| `Array` | TEXT | JSON serialized |
+
+**Date Handling:**
+```typescript
+// Storing dates
+registrationDate.toISOString() // "2024-03-15T10:30:00.000Z"
+
+// Retrieving dates
+new Date(row.registration_date)
+```
+
+**Array Storage (Ballot Preferences):**
+```typescript
+// Storing
+JSON.stringify(preferences) // "[\"id1\",\"id2\",\"id3\"]"
+
+// Retrieving
+JSON.parse(row.preferences)
+```
+
+## Repository Catalog
+
+### VoterRepository
+
+**Purpose:** Manage voter accounts
+
+**Key Methods:**
+- `save(voter)` - Create new voter
+- `findById(voterID)` - Lookup by ID
+- `findByEmail(email)` - Lookup for login
+- `update(voter)` - Update voter details
+- `delete(voterID)` - Remove voter
+- `findAll()` - List all voters
+
+### ElectionRepository
+
+**Purpose:** Manage elections
+
+**Key Methods:**
+- `save(election)` - Create new election
+- `findById(electionID)` - Get specific election
+- `findActive()` - Get currently active elections
+- `update(election)` - Update election (status changes)
+- `delete(electionID)` - Remove draft election
+- `findAll()` - List all elections
+
+### CandidateRepository
+
+**Purpose:** Manage candidates
+
+**Key Methods:**
+- `save(candidate)` - Add candidate to election
+- `findById(candidateID)` - Get specific candidate
+- `findByElectionId(electionID)` - Get all candidates for election
+- `update(candidate)` - Update candidate details
+- `delete(candidateID)` - Remove candidate
+
+### BallotRepository
+
+**Purpose:** Store anonymous votes
+
+**Key Methods:**
+- `save(ballot)` - Store a cast ballot
+- `findByElectionId(electionID)` - Get all ballots for results
+- `countByElectionId(electionID)` - Get vote count
+- `deleteByElectionId(electionID)` - Clear votes (admin function)
+
+**Note:** No `findByVoterId` - ballots are anonymous!
+
+### VoteConfirmationRepository
+
+**Purpose:** Track voter participation
+
+**Key Methods:**
+- `save(confirmation)` - Record vote confirmation
+- `findByVoterId(voterID)` - Get voter's confirmations
+- `findByElectionId(electionID)` - Get all confirmations for election
+- `exists(voterID, electionID)` - Check if voted
+
+### VoterEligibilityRepository
+
+**Purpose:** Track eligibility and voting status
+
+**Key Methods:**
+- `addEligibility(voterID, electionID)` - Make voter eligible
+- `markVoted(voterID, electionID)` - Record that voter voted
+- `hasVoted(voterID, electionID)` - Check voting status
+- `getEligibleVoters(electionID)` - List eligible voters
+
+### AuditLogRepository
+
+**Purpose:** Immutable event logging
+
+**Key Methods:**
+- `save(entry)` - Record audit event
+- `findAll()` - Get full audit trail
+- `findByElectionId(electionID)` - Get election-specific logs
+- `count()` - Get total audit entries
+
+**Note:** No update or delete - audit logs are immutable.
+
+### AdminRepository
+
+**Purpose:** Manage admin accounts
+
+**Key Methods:**
+- `save(admin)` - Create admin user
+- `findById(adminID)` - Get admin by ID
+- `findByUsername(username)` - Lookup for login
+- `findAll()` - List all admins
+- `update(admin)` - Update admin details
+- `delete(adminID)` - Remove admin
+
+### SettingsRepository
+
+**Purpose:** Store system configuration
+
+**Key Methods:**
+- `set(key, value)` - Update setting
+- `get(key)` - Retrieve setting value
+- `getAll()` - Get all settings as object
+
+**Typical Settings:**
+- Maintenance mode
+- Banner messages
+- Feature flags (signup enabled, login enabled)
+
+## Testing Strategy
+
+### In-Memory Databases
+
+```typescript
+// From src/db/connection.ts:100-131
+public static getTestInstance(path: string = ":memory:"): Database.Database {
+    const db = new Database(path);
+    db.pragma("foreign_keys = ON");
+
+    // Run migrations for test database
+    const migrationFiles = readdirSync(DatabaseConnection.MIGRATIONS_PATH)
+        .filter((file) => file.endsWith(".sql"))
+        .sort();
+
+    for (const file of migrationFiles) {
+        const version = parseInt(file.split("_")[0]);
+        const migrationSQL = readFileSync(
+            join(DatabaseConnection.MIGRATIONS_PATH, file), 
+            "utf-8"
+        );
+        db.exec(migrationSQL);
+        // ... record migration ...
+    }
+
+    return db;
+}
+```
+
+**Benefits:**
+- Fast test execution (no disk I/O)
+- Isolated test environment
+- Automatic cleanup (in-memory database discarded)
+
+### Repository Mocking
+
+For unit tests, mock repository interfaces:
+
+```typescript
+// Example test pattern
+const mockVoterRepo: IVoterRepository = {
+    save: jest.fn(),
+    findById: jest.fn().mockReturnValue(mockVoter),
+    // ... other methods
+};
+
+const service = new VoterService(mockVoterRepo);
+```
+
+## Performance Considerations
+
+### Indexing Strategy
+
+**Indexes to Add:**
+```sql
+-- Login lookups
+CREATE INDEX idx_voters_email ON voters(email);
+CREATE INDEX idx_admins_username ON admins(username);
+
+-- Election queries
+CREATE INDEX idx_elections_status ON elections(status);
+
+-- Ballot retrieval
+CREATE INDEX idx_ballots_election ON ballots(election_id);
+
+-- Eligibility checks
+CREATE INDEX idx_eligibility_voter_election 
+    ON voter_eligibility(voter_id, election_id);
+```
+
+### Query Optimization
+
+**Current Approach:**
+- Simple queries - optimization not critical at current scale
+- Prepared statements cache compilation
+- Foreign keys enforce referential integrity
+
+**Future Optimizations:**
+- Add indexes as data volume grows
+- Use `EXPLAIN QUERY PLAN` for slow queries
+- Consider materialized views for complex reports
+
+### Connection Pooling
+
+**Not Applicable:**
+SQLite uses a single connection (file-based locking). Connection pooling is not beneficial and can cause lock contention.
+
+## Database Backups
+
+**Simple Backup Strategy:**
+
+```bash
+# Copy database file
+cp ~/.local/share/consensus/database.sqlite backup-$(date +%Y%m%d).sqlite
+
+# Or use SQLite backup command
+sqlite3 database.sqlite ".backup backup.sqlite"
+```
+
+**Recommended Schedule:**
+- Before each election goes active
+- Daily during active voting periods
+- After election closes and results are finalized
+
+## Migration to Production Database
+
+**When to Switch from SQLite:**
+
+- Concurrent voters > 100 simultaneous
+- Need for horizontal scaling
+- Geographical distribution
+- Regulatory requirements for specific DBMS
+
+**Migration Path:**
+
+1. **Implement PostgreSQL repositories** (same interfaces)
+2. **Update DatabaseConnection** to use pg/postgres driver
+3. **Convert schema migrations** to PostgreSQL syntax
+4. **Export data from SQLite**, import to PostgreSQL
+5. **Update deployment** to include database server
+
+**Service Layer:** No changes required (abstracted by repositories)
+
+## Next Steps
+
+- [Domain Model](/architecture/domain-model) - Entities persisted by repositories
+- [Design Patterns](/architecture/design-patterns) - How patterns use repositories

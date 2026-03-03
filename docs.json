@@ -1,122 +1,111 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Consensus",
+  "theme": "linden",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#2563eb",
+    "light": "#3b82f6",
+    "dark": "#1e40af"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/kierandrewett/consensus"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/kierandrewett/consensus"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "installation"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Features",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "features/voting-systems",
+              "features/voter-management",
+              "features/election-management",
+              "features/results-calculation"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "User Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/voter-guide",
+              "guides/admin-guide",
+              "guides/creating-elections",
+              "guides/managing-voters"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Architecture",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "architecture/overview",
+              "architecture/domain-model",
+              "architecture/design-patterns",
+              "architecture/data-layer"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/configuration",
+              "deployment/security"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Services",
             "pages": [
-              "api-reference/introduction"
+              "api/services/election-service",
+              "api/services/voter-service",
+              "api/services/voting-service"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Repositories",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/repositories/election-repository",
+              "api/repositories/voter-repository",
+              "api/repositories/ballot-repository"
+            ]
+          },
+          {
+            "group": "Domain Entities",
+            "pages": [
+              "api/entities/election",
+              "api/entities/voter",
+              "api/entities/ballot",
+              "api/entities/candidate"
+            ]
+          },
+          {
+            "group": "Voting Strategies",
+            "pages": [
+              "api/strategies/fptp-strategy",
+              "api/strategies/stv-strategy",
+              "api/strategies/av-strategy"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

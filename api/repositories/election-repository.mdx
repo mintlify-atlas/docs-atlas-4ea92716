@@ -1,0 +1,208 @@
+---
+title: "ElectionRepository"
+description: "Repository for managing election data access using SQLite"
+---
+
+## Overview
+
+The `ElectionRepository` class handles all database operations for elections in the Consensus e-voting platform. It implements the `IElectionRepository` interface and uses SQLite for data persistence.
+
+## Constructor
+
+```typescript
+constructor(db?: Database.Database)
+```
+
+<ParamField path="db" type="Database.Database" optional>
+  Optional database instance. If not provided, uses the singleton DatabaseConnection instance.
+</ParamField>
+
+## Methods
+
+### save
+
+Persists a new election to the database.
+
+```typescript
+save(election: Election): void
+```
+
+<ParamField path="election" type="Election" required>
+  The election entity to save to the database.
+</ParamField>
+
+<ResponseField name="return" type="void">
+  No return value. Throws an error if the save operation fails.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const election = new Election(
+  "elec-123",
+  "Presidential Election 2024",
+  ElectionType.PREFERENTIAL,
+  new Date("2024-11-01"),
+  new Date("2024-11-30"),
+  "Annual presidential election"
+);
+
+electionRepository.save(election);
+```
+
+### findById
+
+Retrieves an election by its unique identifier.
+
+```typescript
+findById(electionID: string): Election | null
+```
+
+<ParamField path="electionID" type="string" required>
+  The unique identifier of the election to retrieve.
+</ParamField>
+
+<ResponseField name="return" type="Election | null">
+  Returns the Election entity if found, or null if no election exists with the given ID.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const election = electionRepository.findById("elec-123");
+if (election) {
+  console.log(election.name);
+}
+```
+
+### findByStatus
+
+Retrieves all elections with a specific status.
+
+```typescript
+findByStatus(status: ElectionStatus): Election[]
+```
+
+<ParamField path="status" type="ElectionStatus" required>
+  The status to filter elections by (DRAFT, ACTIVE, CLOSED).
+</ParamField>
+
+<ResponseField name="return" type="Election[]">
+  Array of elections matching the specified status. Returns empty array if no matches found.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const activeElections = electionRepository.findByStatus(ElectionStatus.ACTIVE);
+console.log(`Found ${activeElections.length} active elections`);
+```
+
+### findActive
+
+Retrieves all currently active elections (status is ACTIVE and current date is between start and end dates).
+
+```typescript
+findActive(): Election[]
+```
+
+<ResponseField name="return" type="Election[]">
+  Array of currently active elections. Returns empty array if no active elections found.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const activeElections = electionRepository.findActive();
+activeElections.forEach(election => {
+  console.log(`Active: ${election.name}`);
+});
+```
+
+### update
+
+Updates an existing election in the database.
+
+```typescript
+update(election: Election): void
+```
+
+<ParamField path="election" type="Election" required>
+  The election entity with updated values. The electionID must match an existing election.
+</ParamField>
+
+<ResponseField name="return" type="void">
+  No return value. Throws an error if the update operation fails.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const election = electionRepository.findById("elec-123");
+if (election) {
+  election.status = ElectionStatus.ACTIVE;
+  electionRepository.update(election);
+}
+```
+
+### delete
+
+Deletes an election from the database.
+
+```typescript
+delete(electionID: string): void
+```
+
+<ParamField path="electionID" type="string" required>
+  The unique identifier of the election to delete.
+</ParamField>
+
+<ResponseField name="return" type="void">
+  No return value. Throws an error if the delete operation fails.
+</ResponseField>
+
+**Example:**
+
+```typescript
+electionRepository.delete("elec-123");
+```
+
+### findAll
+
+Retrieves all elections from the database.
+
+```typescript
+findAll(): Election[]
+```
+
+<ResponseField name="return" type="Election[]">
+  Array of all elections in the database. Returns empty array if no elections exist.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const allElections = electionRepository.findAll();
+console.log(`Total elections: ${allElections.length}`);
+```
+
+## Related Types
+
+### Election
+
+The Election entity with the following properties:
+
+- `electionID: string` - Unique identifier
+- `name: string` - Election name
+- `electionType: ElectionType` - Type of election (FPTP or PREFERENTIAL)
+- `status: ElectionStatus` - Current status (DRAFT, ACTIVE, or CLOSED)
+- `startDate: Date` - Election start date
+- `endDate: Date` - Election end date
+- `description: string` - Election description
+
+### ElectionStatus
+
+Enum with values:
+- `DRAFT` - Election is being prepared
+- `ACTIVE` - Election is currently running
+- `CLOSED` - Election has ended

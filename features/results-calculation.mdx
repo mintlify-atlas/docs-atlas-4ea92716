@@ -1,0 +1,443 @@
+---
+title: Results Calculation
+description: Learn how Consensus calculates election results using different voting strategies and handles edge cases
+---
+
+Consensus uses a Strategy pattern to calculate election results, with each voting system implementing its own calculation algorithm. Results are only available for CLOSED elections.
+
+## Results Availability
+
+Results can only be calculated for elections that have been closed:
+
+```typescript
+// From src/services/VotingService.ts:157-166
+calculateResults(electionID: string): VoteResult[] {
+    const election = this.electionRepository.findById(electionID);
+    if (!election) {
+        throw new Error("Election not found");
+    }
+
+    // Election must be closed to view results
+    if (election.status !== ElectionStatus.CLOSED) {
+        throw new Error("Results only available for closed elections");
+    }
+    // ...
+}
+```
+
+<Warning>
+  Attempting to view results for DRAFT or ACTIVE elections will fail. Close the election first to calculate results.
+</Warning>
+
+## Vote Result Structure
+
+All voting systems return results in a standardized format:
+
+```typescript
+// From src/services/strategies/IVotingStrategy.ts:4-11
+export interface VoteResult {
+    candidateID: string;
+    candidateName: string;
+    votes: number;
+    percentage: number;
+    isWinner: boolean;
+    isTied?: boolean; // True when multiple candidates have the same top votes
+}
+```
+
+<ResponseField name="candidateID" type="string">
+  Unique identifier for the candidate
+</ResponseField>
+<ResponseField name="candidateName" type="string">
+  Display name of the candidate
+</ResponseField>
+<ResponseField name="votes" type="number">
+  Number of votes received (interpretation varies by system)
+</ResponseField>
+<ResponseField name="percentage" type="number">
+  Percentage of total votes (0-100)
+</ResponseField>
+<ResponseField name="isWinner" type="boolean">
+  Whether this candidate won the election
+</ResponseField>
+<ResponseField name="isTied" type="boolean" default="undefined">
+  Only present for FPTP - indicates a tie at the top
+</ResponseField>
+
+## Strategy Pattern Implementation
+
+Results calculation uses the Strategy pattern to apply different algorithms:
+
+```typescript
+// From src/services/VotingService.ts:26-41
+private strategyMap: Map<ElectionType, IVotingStrategy>;
+
+constructor(...) {
+    this.anonymousAdapter = new AnonymousBallotAdapter();
+    this.strategyMap = new Map();
+    this.strategyMap.set(ElectionType.FPTP, new FPTPStrategy());
+    this.strategyMap.set(ElectionType.STV, new STVStrategy());
+    this.strategyMap.set(ElectionType.AV, new AVStrategy());
+    this.strategyMap.set(ElectionType.PREFERENTIAL, new STVStrategy());
+}
+```
+
+<Info>
+  The PREFERENTIAL election type is an alias for STV and uses the same calculation strategy.
+</Info>
+
+## FPTP Results Calculation
+
+First Past The Post counts single-choice votes and declares the candidate with the most votes as winner.
+
+### Algorithm
+
+```typescript
+// From src/services/strategies/FPTPStrategy.ts:6-16
+calculateResults(ballots: Ballot[], candidates: Candidate[]): VoteResult[] {
+    // Count votes for each candidate
+    const voteCounts = new Map<string, number>();
+    candidates.forEach((c) => voteCounts.set(c.candidateID, 0));
+
+    ballots.forEach((ballot) => {
+        // For FPTP, preferences array has single item
+        const candidateID = ballot.preferences[0];
+        const currentCount = voteCounts.get(candidateID) || 0;
+        voteCounts.set(candidateID, currentCount + 1);
+    });
+    // ...
+}
+```
+
+### Tie Handling
+
+FPTP detects and flags ties when multiple candidates have the same highest vote count:
+
+```typescript
+// From src/services/strategies/FPTPStrategy.ts:36-50
+if (results.length > 0 && results[0].votes > 0) {
+    const topVotes = results[0].votes;
+    const tiedCandidates = results.filter((r) => r.votes === topVotes);
+
+    if (tiedCandidates.length > 1) {
+        // Tie detected - flag for admin resolution, no automatic winner
+        tiedCandidates.forEach((r) => {
+            r.isTied = true;
+            r.isWinner = false;
+        });
+    } else {
+        // Clear winner
+        results[0].isWinner = true;
+    }
+}
+```
+
+<Warning>
+  FPTP ties require manual resolution. The system will not automatically select a winner when multiple candidates have the same highest vote count.
+</Warning>
+
+### Example Output
+
+<CodeGroup>
+```json Clear Winner
+[
+  {
+    "candidateID": "abc-123",
+    "candidateName": "Alice Johnson",
+    "votes": 150,
+    "percentage": 60.0,
+    "isWinner": true
+  },
+  {
+    "candidateID": "def-456",
+    "candidateName": "Bob Smith",
+    "votes": 100,
+    "percentage": 40.0,
+    "isWinner": false
+  }
+]
+```
+
+```json Tie Scenario
+[
+  {
+    "candidateID": "abc-123",
+    "candidateName": "Alice Johnson",
+    "votes": 125,
+    "percentage": 50.0,
+    "isWinner": false,
+    "isTied": true
+  },
+  {
+    "candidateID": "def-456",
+    "candidateName": "Bob Smith",
+    "votes": 125,
+    "percentage": 50.0,
+    "isWinner": false,
+    "isTied": true
+  }
+]
+```
+</CodeGroup>
+
+## STV Results Calculation
+
+Single Transferable Vote uses a quota system with vote redistribution.
+
+### Quota Calculation
+
+```typescript
+// From src/services/strategies/STVStrategy.ts:10-11
+const totalVotes = ballots.length;
+const quota = Math.floor(totalVotes / 2) + 1; // Droop quota for single winner
+```
+
+<Info>
+  The Droop quota ensures a candidate has majority support: `(Total Votes / 2) + 1`
+</Info>
+
+### Algorithm Steps
+
+<Steps>
+  <Step title="Count first preferences">
+    ```typescript
+    // From src/services/strategies/STVStrategy.ts:24-30
+    remainingBallots.forEach((rb) => {
+        if (rb.ballot.preferences && rb.ballot.preferences.length > 0) {
+            const firstChoice = rb.ballot.preferences[0];
+            voteCounts.set(firstChoice, (voteCounts.get(firstChoice) || 0) + 1);
+        }
+    });
+    ```
+  </Step>
+  
+  <Step title="Check for quota winner">
+    ```typescript
+    // From src/services/strategies/STVStrategy.ts:33-39
+    let winner: string | null = null;
+    for (const [candidateID, votes] of voteCounts.entries()) {
+        if (votes >= quota) {
+            winner = candidateID;
+            break;
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Eliminate lowest and redistribute">
+    If no winner, eliminate the candidate with fewest votes and transfer their ballots to next preferences:
+    
+    ```typescript
+    // From src/services/strategies/STVStrategy.ts:42-60
+    if (!winner && voteCounts.size > 1) {
+        const sorted = Array.from(voteCounts.entries()).sort((a, b) => a[1] - b[1]);
+        const lowestCandidate = sorted[0][0];
+        eliminated.add(lowestCandidate);
+
+        // Redistribute votes
+        remainingBallots.forEach((rb) => {
+            if (rb.ballot.preferences && 
+                rb.ballot.preferences[rb.currentPreference] === lowestCandidate) {
+                rb.currentPreference++;
+                if (rb.currentPreference < rb.ballot.preferences.length) {
+                    const nextChoice = rb.ballot.preferences[rb.currentPreference];
+                    if (!eliminated.has(nextChoice)) {
+                        voteCounts.set(nextChoice, (voteCounts.get(nextChoice) || 0) + 1);
+                    }
+                }
+            }
+        });
+    }
+    ```
+  </Step>
+  
+  <Step title="Declare winner">
+    After redistribution, the candidate with the most votes wins
+  </Step>
+</Steps>
+
+<Info>
+  Consensus implements a simplified single-round STV. Full STV implementations may perform multiple elimination rounds until a candidate reaches the quota.
+</Info>
+
+## AV Results Calculation
+
+Alternative Vote eliminates candidates until one achieves an absolute majority.
+
+### Majority Threshold
+
+```typescript
+// From src/services/strategies/AVStrategy.ts:7-8
+const totalVotes = ballots.length;
+const majority = Math.floor(totalVotes / 2) + 1;
+```
+
+<Card title="Key Difference from STV" icon="scale-balanced">
+  AV requires an absolute majority (50% + 1), while STV uses a quota. AV continues elimination rounds until a candidate achieves this majority.
+</Card>
+
+### Elimination Rounds
+
+AV performs multiple rounds of elimination:
+
+```typescript
+// From src/services/strategies/AVStrategy.ts:19-67
+while (activeCandidates.size > 1) {
+    // Count votes at current preference level
+    const roundCounts = new Map<string, number>();
+    activeCandidates.forEach((c) => roundCounts.set(c, 0));
+
+    ballotStates.forEach((bs) => {
+        // Find current active preference
+        while (bs.currentPreference < bs.ballot.preferences.length) {
+            const choice = bs.ballot.preferences[bs.currentPreference];
+            if (activeCandidates.has(choice)) {
+                roundCounts.set(choice, (roundCounts.get(choice) || 0) + 1);
+                break;
+            }
+            bs.currentPreference++;
+        }
+    });
+
+    // Check for majority winner
+    let winner: string | null = null;
+    for (const [candidateID, votes] of roundCounts.entries()) {
+        if (votes >= majority) {
+            winner = candidateID;
+            finalCounts = roundCounts;
+            break;
+        }
+    }
+
+    if (winner) break;
+
+    // Eliminate candidate with fewest votes
+    const sorted = Array.from(roundCounts.entries()).sort((a, b) => a[1] - b[1]);
+    const toEliminate = sorted[0][0];
+    activeCandidates.delete(toEliminate);
+    finalCounts = roundCounts;
+}
+```
+
+### Default Winner
+
+If only one candidate remains, they win by default:
+
+```typescript
+// From src/services/strategies/AVStrategy.ts:70-75
+if (activeCandidates.size === 1) {
+    const lastCandidate = Array.from(activeCandidates)[0];
+    if (!finalCounts.has(lastCandidate)) {
+        finalCounts.set(lastCandidate, 0);
+    }
+}
+```
+
+## Ballot Anonymity
+
+All results are calculated from anonymous ballots with no link to voters:
+
+```typescript
+// From src/services/VotingService.ts:169-177
+// Get ballots and candidates
+const ballots = this.ballotRepository.findByElectionId(electionID);
+const candidates = this.candidateRepository.findByElectionId(electionID);
+
+const strategy = this.strategyMap.get(election.electionType);
+if (!strategy) {
+    throw new Error(`No voting strategy for election type: ${election.electionType}`);
+}
+
+return strategy.calculateResults(ballots, candidates);
+```
+
+<Info>
+  Ballots retrieved from the repository contain no voter identification. The anonymization happens during vote casting through the AnonymousBallotAdapter.
+</Info>
+
+## Vote Counts
+
+Get the total number of votes cast without calculating full results:
+
+```typescript
+// From src/services/VotingService.ts:183-185
+getVoteCount(electionID: string): number {
+    return this.ballotRepository.countByElectionId(electionID);
+}
+```
+
+## Results Ordering
+
+All voting strategies return results sorted by vote count (descending):
+
+```typescript
+// From FPTPStrategy.ts:32
+results.sort((a, b) => b.votes - a.votes);
+
+// From STVStrategy.ts:85
+results.sort((a, b) => b.votes - a.votes);
+
+// From AVStrategy.ts:90
+results.sort((a, b) => b.votes - a.votes);
+```
+
+<Info>
+  The winner (or tied candidates) will always appear first in the results array.
+</Info>
+
+## Percentage Calculation
+
+Vote percentages are calculated against total ballots cast:
+
+```typescript
+// Example from FPTPStrategy.ts:27
+percentage: totalVotes > 0 ? (votes / totalVotes) * 100 : 0
+```
+
+<Warning>
+  For STV and AV, the "votes" shown in results represent the final count after redistribution, not original first preferences.
+</Warning>
+
+## Comparison Table
+
+| Feature | FPTP | STV | AV |
+|---------|------|-----|----|
+| **Winner criteria** | Plurality | Quota (Droop) | Majority (50%+1) |
+| **Redistribution** | None | One round | Multiple rounds |
+| **Tie handling** | Flags ties | Eliminates lowest | Continues eliminations |
+| **Vote count shown** | Original | After redistribution | After redistribution |
+| **Complexity** | O(n) | O(n × c) | O(n × c × r) |
+
+<Accordion title="Complexity notation">
+  - n = number of ballots
+  - c = number of candidates
+  - r = elimination rounds (AV only)
+</Accordion>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Close elections promptly" icon="clock">
+    Close elections as soon as voting period ends to prevent confusion
+  </Card>
+  <Card title="Handle ties manually" icon="handshake">
+    Have a tiebreaker policy ready for FPTP elections
+  </Card>
+  <Card title="Explain redistribution" icon="circle-info">
+    For STV/AV, help voters understand that vote counts reflect final tallies
+  </Card>
+  <Card title="Audit results" icon="magnifying-glass">
+    Review ballot counts and percentages for consistency
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Voting Systems" icon="check-to-slot" href="/features/voting-systems">
+    Understand how each voting system works
+  </Card>
+  <Card title="Election Management" icon="calendar" href="/features/election-management">
+    Learn how to close elections and trigger results
+  </Card>
+</CardGroup>

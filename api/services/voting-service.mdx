@@ -1,0 +1,334 @@
+---
+title: "VotingService"
+description: "Manages vote casting, ballot anonymization, and result calculation"
+---
+
+## Overview
+
+The `VotingService` handles all business logic related to voting in the Consensus e-voting platform. It manages vote casting with strict validation, ballot anonymization using the Adapter pattern, and result calculation using the Strategy pattern for different voting systems.
+
+## Constructor
+
+```typescript
+constructor(
+    ballotRepository: IBallotRepository,
+    eligibilityRepository: IVoterEligibilityRepository,
+    confirmationRepository: IVoteConfirmationRepository,
+    electionRepository: IElectionRepository,
+    candidateRepository: ICandidateRepository
+)
+```
+
+<ParamField path="ballotRepository" type="IBallotRepository" required>
+  Repository for anonymous ballot persistence
+</ParamField>
+
+<ParamField path="eligibilityRepository" type="IVoterEligibilityRepository" required>
+  Repository for tracking voter eligibility and voting status
+</ParamField>
+
+<ParamField path="confirmationRepository" type="IVoteConfirmationRepository" required>
+  Repository for vote confirmation receipts
+</ParamField>
+
+<ParamField path="electionRepository" type="IElectionRepository" required>
+  Repository for election data
+</ParamField>
+
+<ParamField path="candidateRepository" type="ICandidateRepository" required>
+  Repository for candidate data
+</ParamField>
+
+## Methods
+
+### castVote
+
+Casts a vote with full validation and anonymization.
+
+```typescript
+castVote(voter: Voter, dto: CastVoteDTO): VoteConfirmation
+```
+
+<ParamField path="voter" type="Voter" required>
+  The voter entity casting the vote
+</ParamField>
+
+<ParamField path="dto" type="CastVoteDTO" required>
+  Vote data
+  
+  **CastVoteDTO:**
+  - `voterID: string` - ID of the voter
+  - `electionID: string` - ID of the election
+  - `candidateID?: string` - Single candidate selection (for FPTP)
+  - `preferences?: string[]` - Ranked preferences (for STV/AV/Preferential)
+</ParamField>
+
+<ResponseField name="VoteConfirmation" type="VoteConfirmation">
+  Digital confirmation receipt with unique confirmation ID
+</ResponseField>
+
+**Throws:**
+- `"Voter is not approved"` - Voter registration status is not APPROVED
+- `"Election not found"` - Invalid election ID
+- `"Election is not active"` - Election status is not ACTIVE
+- `"Election is not currently open for voting"` - Current date outside election date range
+- `"Voter has already voted in this election"` - Duplicate vote attempt
+- `"Invalid candidate ID"` - Candidate does not exist in this election
+- `"Invalid candidate ID in preferences: {id}"` - Preference contains invalid candidate
+- `"No voting strategy for election type: {type}"` - Unsupported election type
+- `"Invalid ballot: Please ensure each candidate has a unique ranking with no duplicates."` - Ballot validation failed
+- `"Ballot anonymity verification failed"` - Anonymization process failed
+
+**Validation:**
+- Voter must be APPROVED
+- Election must be ACTIVE
+- Current date must be within election start/end dates
+- Voter cannot have already voted in this election
+- All candidate IDs must belong to the election
+- Ballot must pass voting strategy validation
+- Ballot must pass anonymity verification
+
+**Example:**
+
+```typescript
+// FPTP vote
+const fptpDTO: CastVoteDTO = {
+    voterID: "voter-1",
+    electionID: "election-1",
+    candidateID: "c1"
+};
+
+const confirmation = service.castVote(approvedVoter, fptpDTO);
+console.log(confirmation.confirmationID); // Unique confirmation ID
+
+// Preferential vote (STV/AV)
+const stvDTO: CastVoteDTO = {
+    voterID: "voter-1",
+    electionID: "election-2",
+    preferences: ["c2", "c1", "c3"] // Ranked in order of preference
+};
+
+const stvConfirmation = service.castVote(approvedVoter, stvDTO);
+```
+
+**Process Flow:**
+1. Validates voter approval status
+2. Validates election exists and is active
+3. Checks election date range
+4. Verifies voter hasn't already voted
+5. Validates all candidate IDs
+6. Creates ballot using BallotFactory
+7. Validates ballot using voting strategy
+8. Anonymizes ballot using AnonymousBallotAdapter
+9. Verifies ballot anonymity
+10. Stores anonymous ballot (no voter link)
+11. Stores confirmation receipt
+12. Marks voter as having voted
+
+### getVoterConfirmations
+
+Retrieves all vote confirmations for a voter.
+
+```typescript
+getVoterConfirmations(voterID: string): VoteConfirmation[]
+```
+
+<ParamField path="voterID" type="string" required>
+  ID of the voter
+</ParamField>
+
+<ResponseField name="VoteConfirmation[]" type="VoteConfirmation[]">
+  Array of confirmation receipts (contains no vote details for privacy)
+</ResponseField>
+
+**Notes:**
+- Confirmations do not contain vote choices (privacy protection)
+- Used to prove participation without revealing vote
+
+**Example:**
+
+```typescript
+const confirmations = service.getVoterConfirmations("voter-1");
+confirmations.forEach(c => {
+    console.log(`Voted in election ${c.electionID} at ${c.timestamp}`);
+});
+```
+
+### hasVoted
+
+Checks if a voter has already voted in a specific election.
+
+```typescript
+hasVoted(voterID: string, electionID: string): boolean
+```
+
+<ParamField path="voterID" type="string" required>
+  ID of the voter
+</ParamField>
+
+<ParamField path="electionID" type="string" required>
+  ID of the election
+</ParamField>
+
+<ResponseField name="boolean" type="boolean">
+  True if voter has voted in this election, false otherwise
+</ResponseField>
+
+**Example:**
+
+```typescript
+if (service.hasVoted("voter-1", "election-1")) {
+    console.log("You have already voted in this election");
+}
+```
+
+### calculateResults
+
+Calculates election results using the appropriate voting strategy.
+
+```typescript
+calculateResults(electionID: string): VoteResult[]
+```
+
+<ParamField path="electionID" type="string" required>
+  ID of the election
+</ParamField>
+
+<ResponseField name="VoteResult[]" type="VoteResult[]">
+  Array of results containing vote counts per candidate
+  
+  **VoteResult:**
+  - `candidateID: string` - Candidate identifier
+  - `votes: number` - Number of votes received
+  - Additional fields may vary by voting strategy
+</ResponseField>
+
+**Throws:**
+- `"Election not found"` - Invalid election ID
+- `"Results only available for closed elections"` - Election is not CLOSED
+- `"No voting strategy for election type: {type}"` - Unsupported election type
+
+**Notes:**
+- Only available for CLOSED elections
+- Uses Strategy pattern to apply correct counting algorithm
+- FPTP: Simple vote count
+- STV: Single Transferable Vote algorithm
+- AV: Alternative Vote (Instant Runoff)
+
+**Example:**
+
+```typescript
+const results = service.calculateResults("closed-election");
+results.forEach(result => {
+    console.log(`${result.candidateID}: ${result.votes} votes`);
+});
+
+// Results might look like:
+// [
+//   { candidateID: "c1", votes: 150 },
+//   { candidateID: "c2", votes: 89 },
+//   { candidateID: "c3", votes: 45 }
+// ]
+```
+
+### getVoteCount
+
+Returns the total number of votes cast in an election.
+
+```typescript
+getVoteCount(electionID: string): number
+```
+
+<ParamField path="electionID" type="string" required>
+  ID of the election
+</ParamField>
+
+<ResponseField name="number" type="number">
+  Total number of ballots cast
+</ResponseField>
+
+**Example:**
+
+```typescript
+const totalVotes = service.getVoteCount("election-1");
+console.log(`Total votes cast: ${totalVotes}`);
+```
+
+## Voting Strategies
+
+The service automatically selects the appropriate voting strategy based on election type:
+
+### FPTP (First Past The Post)
+
+- Single candidate selection (`candidateID` required)
+- Winner is candidate with most votes
+- No preference ranking
+
+### STV (Single Transferable Vote)
+
+- Ranked preferences (`preferences` array required)
+- Proportional representation
+- Transfers votes based on preferences
+
+### AV (Alternative Vote)
+
+- Ranked preferences (`preferences` array required)
+- Instant runoff voting
+- Eliminates lowest candidates and redistributes votes
+
+### PREFERENTIAL
+
+- Uses STV strategy
+- Ranked preferences (`preferences` array required)
+
+## Privacy & Security
+
+### Ballot Anonymization
+
+The service uses the `AnonymousBallotAdapter` to ensure:
+- Ballots contain no voter identification
+- Stored ballots cannot be traced back to voters
+- Anonymity is verified before storage
+
+### Vote Confirmation
+
+Confirmations provide:
+- Proof of participation
+- Unique confirmation ID
+- Timestamp of vote
+- **No vote details** (maintains secret ballot)
+
+### Example: Anonymity Verification
+
+```typescript
+// After casting vote
+const ballots = ballotRepository.findByElectionId("election-1");
+const ballotJSON = JSON.stringify(ballots[0]);
+
+// Ballot contains NO voter identification
+console.log(ballotJSON.includes("voter-1")); // false
+```
+
+## Related Types
+
+### ElectionStatus
+
+Enum for election states:
+- `DRAFT` - Election being set up
+- `ACTIVE` - Voting is open
+- `CLOSED` - Voting ended, results available
+
+### ElectionType
+
+Enum for voting systems:
+- `FPTP` - First Past The Post
+- `STV` - Single Transferable Vote
+- `AV` - Alternative Vote  
+- `PREFERENTIAL` - Preferential voting
+
+### RegistrationStatus
+
+Enum for voter approval:
+- `PENDING` - Awaiting approval
+- `APPROVED` - Can vote
+- `REJECTED` - Cannot vote

@@ -1,0 +1,463 @@
+---
+title: Creating Elections
+description: Step-by-step guide to creating and managing elections in Consensus
+---
+
+This guide walks you through creating, configuring, and managing elections in the Consensus e-voting platform.
+
+## Before You Begin
+
+Ensure you:
+- Have administrator access to the platform
+- Are logged in to the admin panel
+- Have a clear plan for your election (type, dates, candidates)
+
+## Creating a New Election
+
+Access the election creation interface at `/admin/elections`.
+
+<Steps>
+  <Step title="Navigate to Elections">
+    From the admin dashboard, click "Elections" in the sidebar or navigate to `/admin/elections`.
+  </Step>
+  
+  <Step title="Click Create Election">
+    Click the "Create Election" button in the top-right corner. A modal form will appear.
+  </Step>
+  
+  <Step title="Enter Election Details">
+    Fill in the required information:
+    
+    **Election Name** (required)
+    - Clear, descriptive name
+    - Example: "2024 Student Union President"
+    - Visible to all voters
+    
+    **Election Type** (required)
+    - **FPTP** (First Past The Post): Single choice, highest votes wins
+    - **STV** (Single Transferable Vote): Ranked choice with proportional representation
+    - **AV** (Alternative Vote): Ranked choice for single winner
+    - **PREFERENTIAL**: General preferential voting system
+    
+    **Start Date** (required)
+    - When voting opens
+    - Use date helper buttons: Now, +1h, -1h, +1 day, -1 day
+    - Must be before end date
+    
+    **End Date** (required)
+    - When voting closes
+    - Use date helper buttons: Now, +1h, +1 day, +1 week, +1 month
+    - Must be after start date
+    
+    **Description** (required)
+    - Brief overview of the election
+    - Displayed to voters on election pages
+    - Include purpose, rules, or important information
+  </Step>
+  
+  <Step title="Submit to Create Draft">
+    Click "Create Election" to save. The election is created in **DRAFT** status.
+  </Step>
+  
+  <Step title="Redirected to Election Details">
+    You'll be automatically taken to the election detail page where you can add candidates.
+  </Step>
+</Steps>
+
+<Note>
+Elections are created in DRAFT status by default. They won't be visible to voters until you activate them.
+</Note>
+
+## Understanding Election Types
+
+Choosing the right election type is crucial for fair results.
+
+### First Past The Post (FPTP)
+
+**How it works:**
+- Voters select one candidate
+- Candidate with the most votes wins
+- Simple majority system
+
+**Best for:**
+- Single position elections
+- Simple yes/no decisions
+- When you need quick, clear results
+
+**Example:**
+- Class president
+- Department chair
+- Single board seat
+
+### Single Transferable Vote (STV)
+
+**How it works:**
+- Voters rank candidates by preference
+- Votes transfer if first choice is eliminated
+- Ensures proportional representation
+- Multiple winners possible
+
+**Best for:**
+- Multi-seat elections
+- Committee selections
+- Proportional representation needs
+
+**Example:**
+- Student council (5 seats)
+- Board of directors
+- Committee members
+
+### Alternative Vote (AV)
+
+**How it works:**
+- Voters rank candidates
+- If no 50% majority, lowest eliminated
+- Votes redistributed until winner emerges
+
+**Best for:**
+- Single-winner elections
+- Ensuring majority support
+- Competitive races with multiple candidates
+
+**Example:**
+- Mayor election
+- Club president
+- Team captain
+
+### Preferential Voting
+
+**How it works:**
+- General ranked-choice system
+- Voters rank candidates in order
+- Preferences used to determine winner
+
+**Best for:**
+- Custom voting scenarios
+- Organizations with specific rules
+- Flexible preference-based systems
+
+## Adding Candidates
+
+After creating an election, you must add candidates before activation.
+
+<Steps>
+  <Step title="Access Election Details">
+    From `/admin/elections`, click the eye icon next to your election, or navigate to `/admin/elections/:id`.
+  </Step>
+  
+  <Step title="Locate Candidates Section">
+    Scroll to the "Candidates" section on the election detail page.
+  </Step>
+  
+  <Step title="Click Add Candidate">
+    Click the "Add Candidate" button to open the candidate form.
+  </Step>
+  
+  <Step title="Enter Candidate Information">
+    Fill in the candidate details:
+    
+    **Name** (required)
+    - Full name of the candidate
+    - Example: "Jane Smith"
+    
+    **Party** (optional)
+    - Political party or affiliation
+    - Example: "Independent" or "Student Action Party"
+    - Can be left blank
+    
+    **Biography** (optional)
+    - Brief background or platform
+    - Visible to voters
+    - Include qualifications, goals, or message
+    - Supports multiple lines
+  </Step>
+  
+  <Step title="Submit Candidate">
+    Click "Add Candidate" to save. The candidate appears in the election's candidate list.
+  </Step>
+  
+  <Step title="Repeat for All Candidates">
+    Add as many candidates as needed for your election.
+  </Step>
+</Steps>
+
+<Tip>
+Add candidates in the order you want them displayed to voters. You cannot reorder candidates after creation.
+</Tip>
+
+<Warning>
+You cannot add or remove candidates after activating an election. Ensure all candidates are correct before activation.
+</Warning>
+
+## Removing Candidates
+
+You can remove candidates from DRAFT elections only.
+
+<Steps>
+  <Step title="View Election Details">
+    Navigate to the election detail page.
+  </Step>
+  
+  <Step title="Find Candidate to Remove">
+    Locate the candidate in the candidates list.
+  </Step>
+  
+  <Step title="Click Remove">
+    Click the remove/delete button next to the candidate.
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    Confirm you want to remove this candidate. This action cannot be undone.
+  </Step>
+</Steps>
+
+<Warning>
+Once an election is ACTIVE or CLOSED, candidates cannot be removed. This protects ballot integrity.
+</Warning>
+
+## Activating an Election
+
+Once your election is configured with candidates, you can make it live.
+
+<Steps>
+  <Step title="Verify Election Details">
+    Before activating, double-check:
+    - Election name and description are correct
+    - Start and end dates are accurate
+    - All candidates are added with correct information
+    - Election type is appropriate
+  </Step>
+  
+  <Step title="Click Activate Election">
+    On the election detail page, click the "Activate Election" button.
+  </Step>
+  
+  <Step title="Confirm Activation">
+    Confirm you want to activate the election. Once activated:
+    - Candidates cannot be added or removed
+    - Election details cannot be changed
+    - Election becomes visible to voters
+  </Step>
+  
+  <Step title="Election Goes Live">
+    The election status changes to **ACTIVE** and appears on the voter elections list.
+  </Step>
+</Steps>
+
+<Note>
+Voters can only vote once the start date/time is reached, even if the election is active.
+</Note>
+
+### Requirements for Activation
+
+An election can only be activated if:
+- At least one candidate has been added
+- Start date is before end date
+- Election is currently in DRAFT status
+
+## Managing Active Elections
+
+### Monitoring Vote Progress
+
+From the election detail page, you can see:
+- Current vote count
+- Total number of voters who have participated
+- Time remaining until election closes
+
+### Closing an Election Early
+
+If needed, you can manually close an active election before the end date.
+
+<Steps>
+  <Step title="Navigate to Election">
+    Go to the election detail page at `/admin/elections/:id`.
+  </Step>
+  
+  <Step title="Click Close Election">
+    Click the "Close Election Early" button.
+  </Step>
+  
+  <Step title="Confirm Closure">
+    Confirm you want to close the election. This action:
+    - Immediately ends voting
+    - Prevents any additional votes
+    - Calculates and displays results
+    - Cannot be reversed
+  </Step>
+</Steps>
+
+<Warning>
+Closing an election early is permanent. Make sure this is necessary before proceeding.
+</Warning>
+
+### Automatic Closure
+
+Elections automatically close when:
+- The end date/time is reached
+- System processes closure and calculates results
+- Status changes to CLOSED
+
+## Deleting Elections
+
+You can delete elections in any status, but this is a destructive action.
+
+<Steps>
+  <Step title="Access Election to Delete">
+    Navigate to the election detail page.
+  </Step>
+  
+  <Step title="Click Delete Election">
+    Find and click the "Delete Election" button.
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    Confirm you want to permanently delete this election. This removes:
+    - The election itself
+    - All candidates
+    - All votes cast (if any)
+    - Vote confirmations
+    - Results data
+  </Step>
+  
+  <Step title="Election Removed">
+    You'll be redirected to the elections list. The election is permanently deleted.
+  </Step>
+</Steps>
+
+<Warning>
+Deleting an election is permanent and cannot be undone. All votes and results will be lost. Only delete elections that are no longer needed or were created in error.
+</Warning>
+
+## Election Lifecycle
+
+Understanding the election states helps you manage them effectively.
+
+```
+DRAFT → ACTIVE → CLOSED
+```
+
+### DRAFT
+- Initial creation state
+- Add/remove candidates freely
+- Edit election details
+- Not visible to voters
+- No votes can be cast
+- Can be activated or deleted
+
+### ACTIVE
+- Visible to approved voters
+- Accepting votes (if within date range)
+- Cannot modify candidates or details
+- Shows vote count to admins
+- Can be closed early or deleted
+- Automatically closes at end date
+
+### CLOSED
+- Voting has ended
+- Results are calculated and displayed
+- Visible to all users (including voters)
+- Cannot be reopened
+- Ties can be resolved
+- Can be deleted
+
+## Best Practices
+
+<Tip>
+**Planning**
+- Plan election dates well in advance
+- Allow sufficient voting period (minimum 24-48 hours)
+- Consider time zones for online voting
+- Schedule elections to avoid holidays or busy periods
+</Tip>
+
+<Tip>
+**Configuration**
+- Choose election type based on your needs
+- Use FPTP for simple elections
+- Use STV/AV for competitive multi-candidate races
+- Write clear, concise descriptions
+- Include candidate biographies to help voters decide
+</Tip>
+
+<Tip>
+**Testing**
+- Keep elections in DRAFT while adding candidates
+- Review all details before activating
+- Consider doing a test run with a practice election
+- Verify dates and times are correct
+</Tip>
+
+<Tip>
+**Communication**
+- Notify voters when elections are activated
+- Send reminders before elections close
+- Announce results promptly after closure
+- Explain tie resolutions if applicable
+</Tip>
+
+<Tip>
+**Timing**
+- Use date helper buttons for quick date setting
+- Start elections at convenient times (e.g., 9 AM)
+- End elections at reasonable times (avoid midnight)
+- Allow enough time for all voters to participate
+</Tip>
+
+## Troubleshooting
+
+### Can't activate election
+- **Check candidates**: At least one candidate must be added
+- **Verify dates**: Start date must be before end date
+- **Status check**: Election must be in DRAFT status
+
+### Candidates not appearing
+- Refresh the election detail page
+- Verify you clicked "Add Candidate" (not just cancel)
+- Check for error messages after submission
+
+### Wrong election type selected
+- If in DRAFT: Delete and recreate the election
+- If ACTIVE: Cannot change type, must create new election
+
+### Need to change dates
+- If in DRAFT: Delete and recreate (dates cannot be edited)
+- If ACTIVE: Can close early, but cannot extend
+- Plan dates carefully before activation
+
+### Voters can't see election
+- Verify election is ACTIVE status
+- Check current date/time is between start and end dates
+- Ensure voters are APPROVED status
+- Voters won't see elections they've already voted in
+
+## Advanced Scenarios
+
+### Running Multiple Elections Simultaneously
+
+You can run multiple elections at the same time:
+- Voters see all available elections
+- Each election has independent vote tracking
+- Results are calculated separately
+- Voters can vote in multiple elections
+
+### Handling Election Updates
+
+If you need to change an active election:
+1. Close the current election early
+2. Create a new election with correct details
+3. Add candidates to the new election
+4. Activate when ready
+5. Communicate changes to voters
+
+<Warning>
+Votes from the old election cannot be transferred to a new election. Starting over means all votes are lost.
+</Warning>
+
+### Scheduling Future Elections
+
+You can create and activate elections with future start dates:
+- Create election in DRAFT
+- Add candidates
+- Activate with start date in the future
+- Election appears to voters but voting disabled until start date
+- Voting automatically opens at start date

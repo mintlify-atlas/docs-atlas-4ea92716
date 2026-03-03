@@ -1,0 +1,171 @@
+---
+title: "STV Strategy"
+description: "Single Transferable Vote strategy implementation with ranked-choice voting and vote redistribution"
+---
+
+# STVStrategy
+
+The `STVStrategy` class implements a simplified **Single Transferable Vote** (STV) system for single-winner elections. STV allows voters to rank candidates in order of preference, and uses vote redistribution to ensure the winner has broad support.
+
+## Algorithm
+
+This implementation uses a simplified STV algorithm for single-winner scenarios:
+
+1. **Calculate quota**: Uses the Droop quota: `floor(total_votes / 2) + 1`
+2. **Count first preferences**: Tally each ballot's first-choice candidate
+3. **Check for quota winner**: If any candidate meets or exceeds the quota, they win immediately
+4. **Elimination round**: If no candidate meets the quota:
+   - Eliminate the candidate with the fewest votes
+   - Redistribute their votes to the next preference on each ballot
+   - The candidate with the most votes after redistribution wins
+
+<Note>
+This is a simplified single-round elimination. Full STV implementations may perform multiple elimination rounds.
+</Note>
+
+## Interface
+
+### calculateResults
+
+Calculates election results using the STV mechanism with vote redistribution.
+
+<ParamField path="ballots" type="Ballot[]" required>
+  Array of all ballots cast in the election. Each ballot contains a ranked list of candidate preferences.
+</ParamField>
+
+<ParamField path="candidates" type="Candidate[]" required>
+  Array of all candidates participating in the election.
+</ParamField>
+
+<ResponseField name="results" type="VoteResult[]">
+  Ordered array of vote results, sorted by final vote count (descending). Each result contains:
+  
+  <ResponseField name="candidateID" type="string">
+    Unique identifier of the candidate
+  </ResponseField>
+  
+  <ResponseField name="candidateName" type="string">
+    Display name of the candidate
+  </ResponseField>
+  
+  <ResponseField name="votes" type="number">
+    Final vote count after redistribution. For eliminated candidates, this will be 0.
+  </ResponseField>
+  
+  <ResponseField name="percentage" type="number">
+    Percentage of total votes based on final count (0-100)
+  </ResponseField>
+  
+  <ResponseField name="isWinner" type="boolean">
+    True if this candidate won the election
+  </ResponseField>
+</ResponseField>
+
+#### Example
+
+```typescript
+const strategy = new STVStrategy();
+
+const candidates = [
+  new Candidate('c1', 'e1', 'Alice Johnson', 'Progressive Party', 'Bio'),
+  new Candidate('c2', 'e1', 'Bob Smith', 'Conservative Party', 'Bio'),
+  new Candidate('c3', 'e1', 'Carol White', 'Independent', 'Bio')
+];
+
+// Voters rank their preferences
+const ballots = [
+  new Ballot('b1', 'e1', ['c1', 'c2', 'c3']), // Alice 1st, Bob 2nd, Carol 3rd
+  new Ballot('b2', 'e1', ['c1', 'c3', 'c2']), // Alice 1st, Carol 2nd, Bob 3rd
+  new Ballot('b3', 'e1', ['c2', 'c1', 'c3']), // Bob 1st, Alice 2nd, Carol 3rd
+  new Ballot('b4', 'e1', ['c2', 'c3', 'c1']), // Bob 1st, Carol 2nd, Alice 3rd
+  new Ballot('b5', 'e1', ['c3', 'c1', 'c2'])  // Carol 1st, Alice 2nd, Bob 3rd
+];
+
+const results = strategy.calculateResults(ballots, candidates);
+
+// First preferences: Alice=2, Bob=2, Carol=1
+// Quota = floor(5/2) + 1 = 3
+// No one meets quota, so Carol is eliminated
+// Carol's vote transfers to Alice (her 2nd preference)
+// Final: Alice=3, Bob=2, Carol=0
+// Results:
+// [
+//   { candidateID: 'c1', candidateName: 'Alice Johnson', votes: 3, percentage: 60, isWinner: true },
+//   { candidateID: 'c2', candidateName: 'Bob Smith', votes: 2, percentage: 40, isWinner: false },
+//   { candidateID: 'c3', candidateName: 'Carol White', votes: 0, percentage: 0, isWinner: false }
+// ]
+```
+
+### validateBallot
+
+Validates that a ballot is properly formed for STV voting.
+
+<ParamField path="ballot" type="Ballot" required>
+  The ballot to validate
+</ParamField>
+
+<ParamField path="candidateCount" type="number" required>
+  Number of candidates in the election (not used in current validation)
+</ParamField>
+
+<ResponseField name="valid" type="boolean">
+  Returns `true` if the ballot contains valid ranked preferences without duplicates, `false` otherwise.
+</ResponseField>
+
+#### Validation Rules
+
+- The ballot must have a preferences array
+- The preferences array must not be empty
+- The preferences array must not contain duplicate candidate IDs
+- Voters may rank as few or as many candidates as they wish (partial rankings allowed)
+
+#### Example
+
+```typescript
+const strategy = new STVStrategy();
+
+// Valid: full ranking
+const validBallot = new Ballot('b1', 'e1', ['c1', 'c2', 'c3']);
+strategy.validateBallot(validBallot, 3); // true
+
+// Valid: partial ranking
+const partialBallot = new Ballot('b2', 'e1', ['c2']);
+strategy.validateBallot(partialBallot, 3); // true
+
+// Invalid: duplicate preferences
+const duplicateBallot = new Ballot('b3', 'e1', ['c1', 'c1', 'c2']);
+strategy.validateBallot(duplicateBallot, 3); // false
+
+// Invalid: empty preferences
+const emptyBallot = new Ballot('b4', 'e1', []);
+strategy.validateBallot(emptyBallot, 3); // false
+```
+
+## Vote Redistribution
+
+When a candidate is eliminated, their votes are redistributed:
+
+1. For each ballot that ranked the eliminated candidate
+2. Move to the next preference on that ballot
+3. If the next preference is also eliminated, continue to the subsequent preference
+4. If no valid preferences remain, the vote is exhausted
+
+```typescript
+// Example: Carol eliminated, votes redistribute
+const ballot = new Ballot('b1', 'e1', ['c3', 'c1', 'c2']);
+// Carol (c3) eliminated → vote transfers to Alice (c1)
+```
+
+## Droop Quota
+
+The quota required to win is calculated as:
+
+```typescript
+const quota = Math.floor(totalVotes / 2) + 1;
+```
+
+For 100 votes, the quota is 51. This ensures the winner has majority support.
+
+## Implementation Location
+
+Source: `~/workspace/source/src/services/strategies/STVStrategy.ts:6-88`

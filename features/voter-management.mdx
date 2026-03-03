@@ -1,0 +1,335 @@
+---
+title: Voter Management
+description: Manage voter registration, approval workflows, and voter eligibility in your elections
+---
+
+Consensus provides a complete voter management system with registration workflows, status tracking, and eligibility controls to ensure secure and compliant elections.
+
+## Voter Registration
+
+Voters must register before participating in elections. The registration process includes validation and optional approval workflows.
+
+### Registration Process
+
+<Steps>
+  <Step title="Submit registration">
+    Voters provide their name, email, and password
+  </Step>
+  <Step title="Validation">
+    System validates email format and password strength
+  </Step>
+  <Step title="Approval workflow">
+    Registration enters PENDING status (or APPROVED if auto-approval enabled)
+  </Step>
+  <Step title="Eligibility">
+    Once approved, voters can participate in active elections
+  </Step>
+</Steps>
+
+### Registration Requirements
+
+```typescript
+// From src/services/VoterService.ts:6-10
+export interface VoterRegistrationDTO {
+    name: string;
+    email: string;
+    password: string;
+}
+```
+
+**Validation rules:**
+
+<Accordion title="Email validation">
+  - Must follow standard email format: `user@domain.com`
+  - Must be unique across all voters
+  - Cannot be changed to an email already in use
+  
+  ```typescript
+  // From src/services/VoterService.ts:147-150
+  private isValidEmail(email: string): boolean {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return emailRegex.test(email);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Password requirements">
+  - Minimum 8 characters
+  - Stored as hash in production environments
+  
+  ```typescript
+  // From src/services/VoterService.ts:34-36
+  if (dto.password.length < 8) {
+      throw new Error("Password must be at least 8 characters");
+  }
+  ```
+</Accordion>
+
+<Accordion title="Duplicate prevention">
+  - Email addresses must be unique
+  - Registration fails if email already exists
+  
+  ```typescript
+  // From src/services/VoterService.ts:23-26
+  const existingVoter = this.voterRepository.findByEmail(dto.email);
+  if (existingVoter) {
+      throw new Error("Email already registered");
+  }
+  ```
+</Accordion>
+
+## Registration Status
+
+Each voter has a registration status that determines their eligibility to vote.
+
+```typescript
+// From src/domain/enums/index.ts:14-19
+export enum RegistrationStatus {
+    PENDING = "PENDING",       // Awaiting approval
+    APPROVED = "APPROVED",     // Can vote
+    REJECTED = "REJECTED",     // Registration denied
+    SUSPENDED = "SUSPENDED",   // Temporarily disabled
+}
+```
+
+### Status Workflow
+
+<Steps>
+  <Step title="PENDING">
+    Initial status after registration (unless auto-approved)
+  </Step>
+  <Step title="APPROVED">
+    Voter can participate in elections
+  </Step>
+  <Step title="REJECTED">
+    Registration denied - voter cannot access the platform
+  </Step>
+  <Step title="SUSPENDED">
+    Temporarily disabled - can be re-approved if needed
+  </Step>
+</Steps>
+
+<Info>
+  Only voters with APPROVED status can cast votes in elections.
+</Info>
+
+### Managing Voter Status
+
+**Approving voters:**
+```typescript
+// From src/services/VoterService.ts:70-78
+approveVoter(voterID: string): void {
+    const voter = this.voterRepository.findById(voterID);
+    if (!voter) {
+        throw new Error("Voter not found");
+    }
+
+    voter.registrationStatus = RegistrationStatus.APPROVED;
+    this.voterRepository.update(voter);
+}
+```
+
+**Rejecting registrations:**
+```typescript
+// From src/services/VoterService.ts:83-91
+rejectVoter(voterID: string): void {
+    const voter = this.voterRepository.findById(voterID);
+    if (!voter) {
+        throw new Error("Voter not found");
+    }
+
+    voter.registrationStatus = RegistrationStatus.REJECTED;
+    this.voterRepository.update(voter);
+}
+```
+
+## Auto-Approval
+
+For open elections or trusted environments, you can enable automatic approval:
+
+```typescript
+// From src/services/VoterService.ts:21
+registerVoter(dto: VoterRegistrationDTO, autoApprove: boolean = false): Voter
+```
+
+<CodeGroup>
+```typescript Manual Approval (Default)
+const voter = voterService.registerVoter({
+    name: "John Doe",
+    email: "john@example.com",
+    password: "securepass123"
+}); // Status: PENDING
+```
+
+```typescript Auto-Approval Enabled
+const voter = voterService.registerVoter({
+    name: "Jane Smith",
+    email: "jane@example.com",
+    password: "securepass456"
+}, true); // Status: APPROVED
+```
+</CodeGroup>
+
+<Warning>
+  Auto-approval should only be used in controlled environments where voter identity is verified through external means.
+</Warning>
+
+## Voter Profile Management
+
+Voters can update their profile information after registration.
+
+### Updatable Fields
+
+```typescript
+// From src/services/VoterService.ts:103
+updateVoter(voterID: string, updates: { 
+    name?: string; 
+    email?: string; 
+    passwordHash?: string 
+}): Voter
+```
+
+**Name updates:**
+- No restrictions, updated immediately
+
+**Email updates:**
+- Must pass validation
+- Must not be in use by another voter
+- Changes are validated before applying
+
+```typescript
+// From src/services/VoterService.ts:110-119
+if (updates.email && updates.email !== voter.email) {
+    const existingVoter = this.voterRepository.findByEmail(updates.email);
+    if (existingVoter) {
+        throw new Error("Email already registered");
+    }
+    if (!this.isValidEmail(updates.email)) {
+        throw new Error("Invalid email format");
+    }
+    voter.email = updates.email;
+}
+```
+
+**Password updates:**
+- Should be hashed before passing to update function
+- No minimum length enforced at update (enforced at registration)
+
+## Voting Eligibility
+
+Even approved voters must meet additional criteria to cast a vote:
+
+<AccordionGroup>
+  <Accordion title="Registration status must be APPROVED">
+    ```typescript
+    // From src/services/VotingService.ts:51-53
+    if (voter.registrationStatus !== RegistrationStatus.APPROVED) {
+        throw new Error("Voter is not approved");
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Election must be ACTIVE">
+    ```typescript
+    // From src/services/VotingService.ts:62-64
+    if (election.status !== ElectionStatus.ACTIVE) {
+        throw new Error("Election is not active");
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Current time within election dates">
+    ```typescript
+    // From src/services/VotingService.ts:67-70
+    const now = new Date();
+    if (now < election.startDate || now > election.endDate) {
+        throw new Error("Election is not currently open for voting");
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Voter has not already voted">
+    ```typescript
+    // From src/services/VotingService.ts:73-75
+    if (this.eligibilityRepository.hasVoted(dto.voterID, dto.electionID)) {
+        throw new Error("Voter has already voted in this election");
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Vote Tracking
+
+Consensus tracks that voters have voted while maintaining ballot anonymity.
+
+<Info>
+  The system records **that** a voter voted, but not **how** they voted. Ballots are stored separately without voter identification.
+</Info>
+
+**After casting a vote:**
+1. Anonymous ballot stored in ballot repository
+2. Voter marked as having voted (prevents double voting)
+3. Confirmation receipt issued to voter
+4. No link between voter and ballot content
+
+```typescript
+// From src/services/VotingService.ts:124-133
+// Store anonymous ballot (no link to voter)
+this.ballotRepository.save(anonymousBallot);
+
+// Store confirmation (for voter's records, no vote details)
+this.confirmationRepository.save(confirmation);
+
+// Mark voter as having voted
+this.eligibilityRepository.markVoted(dto.voterID, dto.electionID);
+
+// Return confirmation
+return confirmation;
+```
+
+## GDPR Compliance
+
+Voter accounts can be deleted to comply with data protection regulations.
+
+```typescript
+// From src/services/VoterService.ts:136-142
+deleteVoter(voterID: string): void {
+    const voter = this.voterRepository.findById(voterID);
+    if (!voter) {
+        throw new Error("Voter not found");
+    }
+    this.voterRepository.delete(voterID);
+}
+```
+
+<Warning>
+  Deleting a voter removes their registration but does not affect previously cast ballots (which are anonymous). Vote confirmations linked to the voter will also be removed.
+</Warning>
+
+## Admin Functions
+
+**List all voters:**
+```typescript
+getAllVoters(): Voter[]
+```
+
+**Find voter by email:**
+```typescript
+getVoterByEmail(email: string): Voter | null
+```
+
+**Find voter by ID:**
+```typescript
+getVoterById(voterID: string): Voter | null
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Election Management" icon="calendar" href="/features/election-management">
+    Create and configure elections for approved voters
+  </Card>
+  <Card title="Voting Systems" icon="check-to-slot" href="/features/voting-systems">
+    Learn about the voting systems voters will use
+  </Card>
+</CardGroup>

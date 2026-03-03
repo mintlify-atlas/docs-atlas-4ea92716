@@ -1,0 +1,179 @@
+---
+title: Voting Systems
+description: Understand the three voting systems supported by Consensus and when to use each one
+---
+
+Consensus supports three different voting systems, each designed for specific election scenarios. Choose the system that best matches your election requirements.
+
+## Supported Voting Systems
+
+### First Past The Post (FPTP)
+
+The simplest voting system where voters select a single candidate. The candidate with the most votes wins.
+
+<Card title="Best for" icon="check">
+  - Simple yes/no decisions
+  - Elections with a clear frontrunner
+  - Quick decision-making processes
+  - Voters unfamiliar with ranked voting
+</Card>
+
+**How it works:**
+- Each voter selects one candidate
+- Votes are tallied
+- The candidate with the highest vote count wins
+- No majority required (plurality wins)
+
+<Warning>
+  FPTP can result in ties if multiple candidates receive the same highest vote count. The system will flag tied candidates for manual resolution.
+</Warning>
+
+**Implementation details:**
+```typescript
+// From src/services/strategies/FPTPStrategy.ts:56-58
+validateBallot(ballot: Ballot, _candidateCount: number): boolean {
+    // FPTP requires single candidate selection
+    return ballot.preferences && ballot.preferences.length === 1;
+}
+```
+
+### Single Transferable Vote (STV)
+
+A ranked-choice system that ensures winners meet a quota threshold through preference redistribution.
+
+<Card title="Best for" icon="users">
+  - Multi-winner elections (council seats, board positions)
+  - Ensuring proportional representation
+  - Reducing vote wastage
+  - Complex organizational decisions
+</Card>
+
+**How it works:**
+1. Voters rank candidates in order of preference
+2. A quota is calculated: `(Total Votes / 2) + 1` (Droop quota)
+3. First preference votes are counted
+4. If no candidate meets the quota:
+   - The candidate with the fewest votes is eliminated
+   - Their votes are redistributed to voters' next preferences
+5. Process continues until a winner meets the quota
+
+<Info>
+  Consensus implements a simplified single-winner STV. In production scenarios, STV is typically used for multi-winner elections with more complex redistribution rules.
+</Info>
+
+**Ballot validation:**
+```typescript
+// From src/services/strategies/STVStrategy.ts:90-99
+validateBallot(ballot: Ballot, _candidateCount: number): boolean {
+    // STV requires ranked preferences
+    if (!ballot.preferences || ballot.preferences.length === 0) {
+        return false;
+    }
+
+    // Check for duplicates - each candidate can only be ranked once
+    const uniquePreferences = new Set(ballot.preferences);
+    return uniquePreferences.size === ballot.preferences.length;
+}
+```
+
+### Alternative Vote (AV)
+
+Also known as Instant Runoff Voting, AV ensures the winner has majority support through elimination rounds.
+
+<Card title="Best for" icon="trophy">
+  - Single-winner elections requiring majority support
+  - Presidential or leadership positions
+  - Reducing strategic voting
+  - Elections with multiple strong candidates
+</Card>
+
+**How it works:**
+1. Voters rank candidates in order of preference
+2. Majority threshold: `(Total Votes / 2) + 1`
+3. First preferences counted
+4. If no candidate has a majority:
+   - Candidate with fewest votes is eliminated
+   - Their ballots transfer to voters' next active preference
+   - Process repeats until a candidate reaches majority
+5. If only one candidate remains, they win by default
+
+**Key differences from STV:**
+- Requires majority (50%+1) not just quota
+- Continues until absolute majority achieved
+- Better suited for single-winner scenarios
+
+```typescript
+// From src/services/strategies/AVStrategy.ts:6-8
+calculateResults(ballots: Ballot[], candidates: Candidate[]): VoteResult[] {
+    const totalVotes = ballots.length;
+    const majority = Math.floor(totalVotes / 2) + 1;
+    // ... elimination rounds continue until majority found
+}
+```
+
+## Comparing Voting Systems
+
+<CardGroup cols={3}>
+  <Card title="FPTP" icon="1">
+    **Complexity:** Simple  
+    **Winner needs:** Plurality  
+    **Ballot:** Single choice  
+    **Best for:** Quick decisions
+  </Card>
+  <Card title="STV" icon="2">
+    **Complexity:** Moderate  
+    **Winner needs:** Quota  
+    **Ballot:** Ranked preferences  
+    **Best for:** Proportional representation
+  </Card>
+  <Card title="AV" icon="3">
+    **Complexity:** Moderate  
+    **Winner needs:** Majority  
+    **Ballot:** Ranked preferences  
+    **Best for:** Majority mandate
+  </Card>
+</CardGroup>
+
+## Selecting a Voting System
+
+When creating an election, choose your voting system based on:
+
+```typescript
+// From src/domain/enums/index.ts:1-6
+export enum ElectionType {
+    FPTP = "FPTP", // First Past The Post
+    STV = "STV",   // Single Transferable Vote
+    AV = "AV",     // Alternative Vote
+    PREFERENTIAL = "PREFERENTIAL", // Alias for STV
+}
+```
+
+<Steps>
+  <Step title="Assess your requirements">
+    Determine if you need plurality, quota, or majority support for your winner
+  </Step>
+  <Step title="Consider voter familiarity">
+    If voters are unfamiliar with ranked voting, FPTP may be more appropriate
+  </Step>
+  <Step title="Evaluate time constraints">
+    FPTP provides fastest results; ranked systems may require more processing
+  </Step>
+  <Step title="Set voting system">
+    Configure the system when creating your election - it cannot be changed once the election is activated
+  </Step>
+</Steps>
+
+<Warning>
+  The voting system cannot be changed after an election is activated. Choose carefully during the draft phase.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Election Management" icon="calendar" href="/features/election-management">
+    Learn how to create and manage elections
+  </Card>
+  <Card title="Results Calculation" icon="chart-bar" href="/features/results-calculation">
+    Understand how results are calculated for each system
+  </Card>
+</CardGroup>

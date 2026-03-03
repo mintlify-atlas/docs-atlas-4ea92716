@@ -1,0 +1,557 @@
+---
+title: Managing Voters
+description: Complete guide to managing voter registrations and accounts in Consensus
+---
+
+This guide covers all aspects of voter management in the Consensus e-voting platform, from reviewing registrations to managing voter statuses.
+
+## Voter Management Overview
+
+As an administrator, you control who can vote in your elections through the voter approval system. Access voter management at `/admin/voters`.
+
+## Understanding Voter Statuses
+
+Every voter has one of three registration statuses:
+
+### PENDING
+- New registration awaiting admin review
+- Voter cannot vote yet
+- Shows "Registration Pending" on voter dashboard
+- Requires admin action (approve or reject)
+
+### APPROVED
+- Voter registration is approved
+- Can participate in all active elections
+- Shows "Verified" status on dashboard
+- Can vote immediately
+
+### REJECTED
+- Voter registration was declined
+- Cannot vote in any election
+- Shows "Registration Not Approved" on dashboard
+- Can contact admin for more information
+
+## Viewing Voter List
+
+The voter management page displays all registered voters.
+
+### Voter Information Displayed
+
+For each voter, you can see:
+- **Name**: Full name as provided during registration
+- **Email**: Email address (unique identifier)
+- **Status**: Current registration status badge
+- **Registered**: Date of registration
+- **Actions**: Quick action buttons
+
+### Filtering Voters
+
+Use the filter tabs to narrow your view:
+
+<Steps>
+  <Step title="All Voters">
+    Click "All" to see every registered voter regardless of status. Shows total count.
+  </Step>
+  
+  <Step title="Pending Voters">
+    Click "Pending" to see only voters awaiting approval. Shows count of pending registrations.
+  </Step>
+  
+  <Step title="Approved Voters">
+    Click "Approved" to see voters who can vote. Shows count of approved voters.
+  </Step>
+  
+  <Step title="Rejected Voters">
+    Click "Rejected" to see declined registrations. Shows count of rejected voters.
+  </Step>
+</Steps>
+
+<Tip>
+Periodically check the "Pending" filter to ensure new registrations are reviewed promptly.
+</Tip>
+
+### Searching for Voters
+
+Use the search bar to find specific voters:
+
+<Steps>
+  <Step title="Enter Search Term">
+    Type in the search box to filter voters by:
+    - Name (case-insensitive)
+    - Email address (case-insensitive)
+    - Any matching text
+  </Step>
+  
+  <Step title="View Filtered Results">
+    The table updates in real-time to show only matching voters.
+  </Step>
+  
+  <Step title="Clear Search">
+    Delete your search term to show all voters again.
+  </Step>
+</Steps>
+
+## Approving Voter Registrations
+
+When new voters register, they appear in the pending list awaiting approval.
+
+### Quick Approval from List
+
+Approve voters directly from the voters list:
+
+<Steps>
+  <Step title="Filter to Pending">
+    Click the "Pending" tab to see registrations awaiting approval.
+  </Step>
+  
+  <Step title="Review Voter Information">
+    Check the voter's name and email in the list.
+  </Step>
+  
+  <Step title="Click Approve Icon">
+    Click the green check mark icon next to the voter.
+  </Step>
+  
+  <Step title="Confirmation">
+    The voter's status immediately changes to APPROVED and they can now vote.
+  </Step>
+</Steps>
+
+### Detailed Review and Approval
+
+For a more thorough review:
+
+<Steps>
+  <Step title="Open Voter Details">
+    Click the eye icon next to a voter to open their detail page at `/admin/voters/:id`.
+  </Step>
+  
+  <Step title="Review Complete Information">
+    The detail page shows:
+    - Full name
+    - Email address
+    - Voter ID (unique identifier)
+    - Registration date and time
+    - Current status
+  </Step>
+  
+  <Step title="Approve Voter">
+    If appropriate, click the "Approve Voter" button on the detail page.
+  </Step>
+  
+  <Step title="Voter Notified">
+    The voter's status updates to APPROVED. They can immediately participate in active elections.
+  </Step>
+</Steps>
+
+<Note>
+Approval is immediate. As soon as you approve a voter, they gain access to vote in any active elections.
+</Note>
+
+## Rejecting Voter Registrations
+
+Sometimes you may need to decline voter registrations.
+
+### Quick Rejection from List
+
+<Steps>
+  <Step title="Locate Voter">
+    Find the voter in the pending list.
+  </Step>
+  
+  <Step title="Click Reject Icon">
+    Click the red X icon next to the voter.
+  </Step>
+  
+  <Step title="Status Updated">
+    The voter's status immediately changes to REJECTED.
+  </Step>
+</Steps>
+
+### Rejection from Detail Page
+
+<Steps>
+  <Step title="Open Voter Details">
+    Navigate to the voter's detail page.
+  </Step>
+  
+  <Step title="Review Information">
+    Verify this is the correct voter to reject.
+  </Step>
+  
+  <Step title="Click Reject Voter">
+    Click the "Reject Voter" button.
+  </Step>
+  
+  <Step title="Confirm Rejection">
+    The voter status updates to REJECTED and they cannot vote.
+  </Step>
+</Steps>
+
+### Impact of Rejection
+
+When a voter is rejected:
+- They cannot vote in any election
+- Their dashboard shows "Registration Not Approved"
+- They see a message to contact an administrator
+- They remain in the system as rejected
+
+<Warning>
+Rejection does not delete the voter account. They can still log in but will see a rejection notice and cannot vote.
+</Warning>
+
+## Auto-Approval Configuration
+
+You can configure the system to automatically approve new registrations.
+
+### Enabling Auto-Approval
+
+<Steps>
+  <Step title="Navigate to Settings">
+    Go to `/admin/management` from the admin sidebar.
+  </Step>
+  
+  <Step title="Find Auto-Approval Setting">
+    Locate the "Auto-Approval Enabled" toggle.
+  </Step>
+  
+  <Step title="Enable Auto-Approval">
+    Toggle the switch to enable automatic approval.
+  </Step>
+  
+  <Step title="Save Settings">
+    Click "Save Settings" to apply changes.
+  </Step>
+</Steps>
+
+### How Auto-Approval Works
+
+When enabled:
+- New voter registrations are automatically approved
+- Voters can vote immediately after registration
+- No admin action required
+- Voters never appear in pending list
+- Best for trusted communities
+
+### When to Use Auto-Approval
+
+**Enable auto-approval when:**
+- Operating in a trusted environment (e.g., company-wide votes)
+- Registration is through verified email domains
+- Speed is more important than vetting
+- You have other verification methods
+
+**Disable auto-approval when:**
+- You need to verify voter identities
+- Restricting voting to specific individuals
+- Running high-stakes elections
+- Security is a primary concern
+
+<Tip>
+For most organizations, manual approval provides better control over who can vote. Only use auto-approval if you're certain all registrants should be allowed to vote.
+</Tip>
+
+## Changing Voter Status
+
+You can change voter status at any time.
+
+### Re-Approving a Rejected Voter
+
+<Steps>
+  <Step title="Find Rejected Voter">
+    Use the "Rejected" filter or search for the voter.
+  </Step>
+  
+  <Step title="Open Detail Page">
+    Click the eye icon to view voter details.
+  </Step>
+  
+  <Step title="Approve Voter">
+    Click the "Approve Voter" button to change status from REJECTED to APPROVED.
+  </Step>
+</Steps>
+
+### Rejecting an Approved Voter
+
+If you need to revoke voting access:
+
+<Steps>
+  <Step title="Find Approved Voter">
+    Locate the voter in the approved list.
+  </Step>
+  
+  <Step title="Open Detail Page">
+    Navigate to their detail page.
+  </Step>
+  
+  <Step title="Reject Voter">
+    Click the "Reject Voter" button to revoke access.
+  </Step>
+</Steps>
+
+<Note>
+Changing a voter from approved to rejected does not remove votes they've already cast. It only prevents future voting.
+</Note>
+
+## Guest Voting
+
+Consensus supports anonymous guest voting by IP address.
+
+### How Guest Voting Works
+
+- Visitors can vote without registering
+- System creates guest account based on IP address
+- Guest accounts are auto-approved
+- Each IP can vote once per election
+- Requires public IP addresses (not localhost/private IPs)
+
+### Enabling Guest Voting
+
+<Steps>
+  <Step title="Go to Settings">
+    Navigate to `/admin/management`.
+  </Step>
+  
+  <Step title="Enable Guest Voting">
+    Toggle "Guest Voting Enabled" to on.
+  </Step>
+  
+  <Step title="Save Settings">
+    Click "Save Settings" to activate guest voting.
+  </Step>
+</Steps>
+
+### Guest Voter Accounts
+
+Guest voters appear in your voter list:
+- Name: "Guest" with partial IP hash (e.g., "Guest (a3b2c1d4)")
+- Email: Internal guest email format
+- Status: Always APPROVED
+- Cannot be manually rejected
+
+### Considerations for Guest Voting
+
+**Advantages:**
+- No registration barrier
+- Quick participation
+- Anonymous voting
+- Good for public polls
+
+**Disadvantages:**
+- Less control over who votes
+- IP-based (can be circumvented with VPN)
+- Cannot verify identity
+- Not suitable for official elections
+
+<Warning>
+Guest voting is not recommended for elections requiring verified identities or high security. Use only for informal polls or public opinion gathering.
+</Warning>
+
+## Bulk Operations
+
+While the current interface handles voters individually, you can work efficiently:
+
+### Approving Multiple Pending Voters
+
+<Steps>
+  <Step title="Filter to Pending">
+    View only pending voters.
+  </Step>
+  
+  <Step title="Approve One by One">
+    Click the approve icon for each voter in sequence.
+  </Step>
+  
+  <Step title="Monitor Count">
+    Watch the pending count decrease as you approve.
+  </Step>
+</Steps>
+
+<Tip>
+Open the pending voters list and work through it systematically. The page updates in real-time as you approve voters.
+</Tip>
+
+## Voter Privacy and Data
+
+### Information You Can See
+
+As an administrator, you have access to:
+- Voter name and email
+- Registration date
+- Approval status
+- Voter ID (system identifier)
+
+### Information You Cannot See
+
+The system protects ballot secrecy:
+- Who a voter voted for
+- Specific candidate choices
+- Vote contents or preferences
+- Vote-to-voter linkage
+
+<Note>
+You can see THAT a voter voted (in vote counts), but not HOW they voted. This ensures ballot secrecy.
+</Note>
+
+### GDPR Compliance
+
+Voters have the right to:
+- Access their data
+- Delete their account
+- Export their information
+
+When a voter deletes their account:
+- Their registration is removed
+- Personal data is deleted
+- Vote confirmations are removed
+- Actual votes remain anonymous in the ballot box
+
+## Best Practices
+
+<Tip>
+**Timely Approval**
+- Check pending registrations daily
+- Approve legitimate voters promptly
+- Don't leave voters waiting unnecessarily
+- Set up a regular review schedule
+</Tip>
+
+<Tip>
+**Verification**
+- Verify voter identities if required by your organization
+- Check email domains for legitimacy
+- Look for duplicate or suspicious registrations
+- Cross-reference with authorized voter lists if available
+</Tip>
+
+<Tip>
+**Communication**
+- Inform voters how long approval typically takes
+- Provide contact information for approval questions
+- Notify rejected voters with reason (outside the system)
+- Set clear expectations about the approval process
+</Tip>
+
+<Tip>
+**Security**
+- Review rejected voters periodically
+- Monitor for patterns of fraudulent registrations
+- Use manual approval for sensitive elections
+- Enable CAPTCHA to reduce bot registrations
+</Tip>
+
+<Tip>
+**Organization**
+- Use search to quickly find specific voters
+- Use filters to focus on voters needing attention
+- Keep accurate records of approval decisions
+- Document reasons for rejections (in separate system)
+</Tip>
+
+## Troubleshooting
+
+### Voter not appearing in list
+- Verify they completed registration
+- Check all status filters (not just pending)
+- Use search to find by email or name
+- Refresh the page
+
+### Cannot approve voter
+- Ensure you're logged in as admin
+- Check that voter is in PENDING status
+- Refresh and try again
+- Check browser console for errors
+
+### Approved voter says they can't vote
+- Verify their status is APPROVED (not pending)
+- Check that elections are ACTIVE
+- Ensure current time is between start and end dates
+- Verify they haven't already voted in that election
+
+### Guest voting not working
+- Check that guest voting is enabled in settings
+- Verify the user has a public IP address
+- Private/local IPs (localhost, 192.168.x.x, 10.x.x.x) are not allowed
+- Check reverse proxy configuration for X-Forwarded-For header
+
+### Too many pending registrations
+- Consider enabling auto-approval for trusted communities
+- Set aside dedicated time for batch approvals
+- Enable CAPTCHA to reduce bot registrations
+- Review registration requirements
+
+## Managing Registration Settings
+
+Control when and how voters can register.
+
+### Disabling Voter Registration
+
+Temporarily close registrations:
+
+<Steps>
+  <Step title="Go to Settings">
+    Navigate to `/admin/management`.
+  </Step>
+  
+  <Step title="Disable Signup">
+    Toggle "Signup Enabled" to off.
+  </Step>
+  
+  <Step title="Save Settings">
+    Voters can no longer register new accounts.
+  </Step>
+</Steps>
+
+**Use this when:**
+- Registration deadline has passed
+- Between election cycles
+- During maintenance
+- When voter list is finalized
+
+### Disabling Voter Login
+
+Temporarily prevent voter login:
+
+<Steps>
+  <Step title="Access Settings">
+    Go to `/admin/management`.
+  </Step>
+  
+  <Step title="Disable Login">
+    Toggle "Login Enabled" to off.
+  </Step>
+  
+  <Step title="Save Settings">
+    Voters cannot log in (existing sessions may remain active).
+  </Step>
+</Steps>
+
+**Use this when:**
+- Performing system maintenance
+- Before major updates
+- During emergency situations
+
+<Warning>
+Disabling login prevents all voters from accessing the system, including those who want to vote in active elections. Use carefully.
+</Warning>
+
+## Voter Account Lifecycle
+
+### New Registration
+1. Voter completes registration form
+2. Account created with PENDING status
+3. Appears in admin pending list
+4. Admin reviews and approves/rejects
+
+### Active Voter
+1. Status set to APPROVED
+2. Can log in and access dashboard
+3. Can vote in active elections
+4. Receives vote confirmations
+
+### Account Deletion
+1. Voter requests account deletion from profile
+2. Must confirm with password
+3. Account and personal data deleted
+4. Voter removed from system
+5. Cannot be recovered

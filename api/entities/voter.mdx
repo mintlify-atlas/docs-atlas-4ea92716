@@ -1,0 +1,246 @@
+---
+title: "Voter"
+description: "Domain entity representing a registered voter with authentication and registration status management"
+---
+
+## Overview
+
+The `Voter` class is a domain entity that represents a registered voter in the Consensus e-voting platform. It encapsulates voter identity, authentication credentials, and registration status with controlled mutation through setters.
+
+## Constructor
+
+```typescript
+new Voter(
+  voterID: string,
+  name: string,
+  email: string,
+  passwordHash: string,
+  registrationStatus?: RegistrationStatus,
+  registrationDate?: Date
+)
+```
+
+<ParamField path="voterID" type="string" required>
+  Unique identifier for the voter
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Full name of the voter (cannot be empty)
+</ParamField>
+
+<ParamField path="email" type="string" required>
+  Email address of the voter (must contain @)
+</ParamField>
+
+<ParamField path="passwordHash" type="string" required>
+  Hashed password for authentication (never store plain text)
+</ParamField>
+
+<ParamField path="registrationStatus" type="RegistrationStatus" default="RegistrationStatus.PENDING">
+  Current registration status. Defaults to `PENDING` if not specified.
+</ParamField>
+
+<ParamField path="registrationDate" type="Date" default="new Date()">
+  Date when the voter registered. Defaults to current date if not specified.
+</ParamField>
+
+### Example
+
+```typescript
+const voter = new Voter(
+  "voter-123",
+  "John Doe",
+  "john@example.com",
+  "hashedPassword123",
+  RegistrationStatus.PENDING,
+  new Date("2024-01-01")
+);
+```
+
+## Properties
+
+<ResponseField name="voterID" type="string" required>
+  Unique identifier for the voter (read-only)
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Full name of the voter. Can be updated via setter with validation.
+</ResponseField>
+
+<ResponseField name="email" type="string" required>
+  Email address of the voter. Can be updated via setter with validation.
+</ResponseField>
+
+<ResponseField name="passwordHash" type="string" required>
+  Hashed password for authentication. Can be updated via setter with validation.
+</ResponseField>
+
+<ResponseField name="registrationStatus" type="RegistrationStatus" required>
+  Current registration status. Can be updated via setter.
+  
+  Valid values:
+  - `RegistrationStatus.PENDING` - Awaiting approval
+  - `RegistrationStatus.APPROVED` - Approved to vote
+  - `RegistrationStatus.REJECTED` - Registration rejected
+  - `RegistrationStatus.SUSPENDED` - Temporarily suspended
+</ResponseField>
+
+<ResponseField name="registrationDate" type="Date" required>
+  Date when the voter registered (read-only)
+</ResponseField>
+
+## Setters
+
+### name
+
+Updates the voter's name with validation.
+
+```typescript
+voter.name = "Updated Name";
+```
+
+**Validation:**
+- Throws `Error` if name is empty or contains only whitespace
+
+### email
+
+Updates the voter's email address with validation.
+
+```typescript
+voter.email = "newemail@example.com";
+```
+
+**Validation:**
+- Throws `Error` if email is empty or doesn't contain `@`
+
+### passwordHash
+
+Updates the voter's password hash with validation.
+
+```typescript
+voter.passwordHash = "newHashedPassword";
+```
+
+**Validation:**
+- Throws `Error` if password hash is empty
+
+### registrationStatus
+
+Updates the voter's registration status.
+
+```typescript
+voter.registrationStatus = RegistrationStatus.APPROVED;
+```
+
+**Valid transitions:**
+- `PENDING` → `APPROVED`
+- `PENDING` → `REJECTED`
+- `APPROVED` → `SUSPENDED`
+
+## Methods
+
+### isApproved()
+
+Checks if the voter is approved.
+
+```typescript
+isApproved(): boolean
+```
+
+**Returns:** `true` if the registration status is `APPROVED`.
+
+**Example:**
+
+```typescript
+const voter = new Voter(
+  "v1",
+  "Test",
+  "test@example.com",
+  "hash",
+  RegistrationStatus.APPROVED
+);
+
+voter.isApproved(); // true
+```
+
+### isSuspended()
+
+Checks if the voter is suspended.
+
+```typescript
+isSuspended(): boolean
+```
+
+**Returns:** `true` if the registration status is `SUSPENDED`.
+
+### canVote()
+
+Determines if the voter is eligible to cast a vote.
+
+```typescript
+canVote(): boolean
+```
+
+**Returns:** `true` if the voter is approved and not suspended.
+
+**Business Logic:** A voter can vote only if they are both approved AND not suspended.
+
+**Example:**
+
+```typescript
+const approvedVoter = new Voter(
+  "v1",
+  "John",
+  "john@example.com",
+  "hash",
+  RegistrationStatus.APPROVED
+);
+approvedVoter.canVote(); // true
+
+const suspendedVoter = new Voter(
+  "v2",
+  "Jane",
+  "jane@example.com",
+  "hash",
+  RegistrationStatus.SUSPENDED
+);
+suspendedVoter.canVote(); // false
+```
+
+## Usage Example
+
+```typescript
+import { Voter } from "./domain/entities/Voter";
+import { RegistrationStatus } from "./domain/enums";
+
+// Create a new voter
+const voter = new Voter(
+  "voter-456",
+  "Jane Doe",
+  "jane@example.com",
+  "hashedPassword456"
+);
+
+// Check default status
+console.log(voter.registrationStatus); // RegistrationStatus.PENDING
+
+// Approve the voter
+voter.registrationStatus = RegistrationStatus.APPROVED;
+
+// Check if voter can vote
+if (voter.canVote()) {
+  console.log("Voter is eligible to cast a ballot");
+}
+
+// Update voter name
+voter.name = "Jane Smith";
+
+// Update email
+voter.email = "jane.smith@example.com";
+```
+
+## Security Notes
+
+- Always store password hashes, never plain text passwords
+- The `passwordHash` property should only be set with properly hashed values
+- Email validation is basic; implement additional validation in your application layer

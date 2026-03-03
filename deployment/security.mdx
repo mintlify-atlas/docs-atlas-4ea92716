@@ -1,0 +1,569 @@
+---
+title: 'Security'
+description: 'Security best practices and hardening guidelines for Consensus deployments'
+---
+
+## Overview
+
+Consensus implements multiple security layers to protect election integrity and user data. This guide covers the built-in security features and best practices for production deployments.
+
+## Authentication & Authorization
+
+### Password Security
+
+Consensus uses bcrypt for password hashing with industry-standard parameters:
+
+```typescript src/utils/password.ts
+import bcrypt from "bcrypt";
+
+const SALT_ROUNDS = 10;
+
+export class PasswordUtil {
+    static async hash(plainPassword: string): Promise<string> {
+        return await bcrypt.hash(plainPassword, SALT_ROUNDS);
+    }
+
+    static async verify(plainPassword: string, hash: string): Promise<boolean> {
+        return await bcrypt.compare(plainPassword, hash);
+    }
+}
+```
+
+<Note>
+  Bcrypt with 10 salt rounds provides strong protection against brute-force attacks while maintaining reasonable performance. Each password hash takes approximately 100ms to compute.
+</Note>
+
+### Session Management
+
+Consensus uses secure session-based authentication with the following features:
+
+<Steps>
+  <Step title="Session Storage">
+    Sessions are stored server-side with signed cookies:
+    ```typescript
+    {
+      secret: config.session.secret,
+      cookieName: "consensusSessionId",
+      cookie: {
+        secure: false, // Set to true with HTTPS
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Session Data">
+    Session data includes:
+    - `voterID`: Authenticated voter identifier
+    - `voterName`: Voter display name
+    - `isAdmin`: Administrator flag
+    - `adminUsername`: Admin username if authenticated
+  </Step>
+  
+  <Step title="Session Validation">
+    Sessions are validated on every request through Fastify hooks (src/web/server.ts:104-138).
+  </Step>
+</Steps>
+
+<Warning>
+  **Production Requirement:** Set `cookie.secure = true` in `src/web/server.ts:73` when deploying with HTTPS. This prevents session cookies from being sent over unencrypted connections.
+</Warning>
+
+### Role Separation
+
+Consensus enforces strict separation between administrators and voters:
+
+| Role | Capabilities | Authentication |
+|------|--------------|----------------|
+| **Admin** | Manage elections, voters, candidates, settings | Username + password via `/admin/login` |
+| **Voter** | Register, view elections, cast votes | Voter ID + password via `/login` |
+
+<Note>
+  Administrators and voters use separate authentication endpoints and cannot access each other's interfaces. Admin routes are protected by the `/admin` prefix.
+</Note>
+
+### Default Admin Account
+
+On first startup, Consensus creates a default administrator account:
+
+```typescript src/web/server.ts:153-167
+const admins = adminRepository.findAll();
+if (admins.length === 0) {
+    const defaultPassword = process.env.CONSENSUS_ADMIN_DEFAULT_PASSWORD || "admin123";
+    const passwordHash = await PasswordUtil.hash(defaultPassword);
+    const admin = new Admin(
+        uuidv4(),
+        "admin",
+        passwordHash,
+        "Administrator",
+        new Date(),
+        true // mustChangePassword
+    );
+    adminRepository.save(admin);
+}
+```
+
+<Warning>
+  **CRITICAL SECURITY STEP:**
+  
+  1. Set `CONSENSUS_ADMIN_DEFAULT_PASSWORD` to a strong password before first run
+  2. Login immediately and change the password
+  3. The `mustChangePassword` flag forces a password change on first login
+  4. Never use the default password `admin123` in production
+</Warning>
+
+## Session Secret Security
+
+### Importance
+
+The `SESSION_SECRET` is used to cryptographically sign session cookies. If compromised, attackers can forge valid sessions and impersonate users.
+
+### Requirements
+
+<Steps>
+  <Step title="Minimum Length">
+    Use at least 32 characters (256 bits of entropy recommended)
+  </Step>
+  
+  <Step title="Randomness">
+    Generate using a cryptographically secure random number generator
+  </Step>
+  
+  <Step title="Uniqueness">
+    Use a different secret for each environment (dev, staging, production)
+  </Step>
+  
+  <Step title="Secrecy">
+    Never commit secrets to version control or share them insecurely
+  </Step>
+</Steps>
+
+### Generating Secure Secrets
+
+<CodeGroup>
+```bash OpenSSL
+openssl rand -hex 32
+```
+
+```bash Node.js
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+```bash Python
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+```bash /dev/urandom
+dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64
+```
+</CodeGroup>
+
+<Warning>
+  **Bad Examples (DO NOT USE):**
+  - Default value: `consensus-secret-key-change-in-production`
+  - Short strings: `mysecret`, `12345`, `password`
+  - Predictable values: `consensus-prod`, `voting-secret`
+  - Reused secrets from other applications
+</Warning>
+
+## Container Security
+
+### Non-Root User
+
+The Docker container runs as a non-root user for defense in depth:
+
+```dockerfile Dockerfile:34-35,52
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 -G nodejs
+
+# Switch to non-root user
+USER nodejs
+```
+
+<Note>
+  Running as UID 1001 (nodejs) prevents privilege escalation attacks and limits damage if the container is compromised.
+</Note>
+
+### File Permissions
+
+Files are owned by the nodejs user during the build process:
+
+```dockerfile Dockerfile:38-42
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+
+# Create data directory
+RUN mkdir -p /app/data && chown nodejs:nodejs /app/data
+```
+
+### Read-Only Root Filesystem
+
+For additional security, run the container with a read-only root filesystem:
+
+```bash
+docker run -d \
+  --name consensus \
+  --read-only \
+  --tmpfs /tmp \
+  -v consensus-data:/app/data \
+  -p 3000:3000 \
+  consensus:latest
+```
+
+<Note>
+  Only `/app/data` needs write access. All other directories can be read-only.
+</Note>
+
+### Security Scanning
+
+Regularly scan the Docker image for vulnerabilities:
+
+<CodeGroup>
+```bash Trivy
+trivy image consensus:latest
+```
+
+```bash Docker Scan
+docker scan consensus:latest
+```
+
+```bash Grype
+grype consensus:latest
+```
+</CodeGroup>
+
+## Database Security
+
+### SQLite Security Features
+
+Consensus uses SQLite with security best practices:
+
+<Steps>
+  <Step title="Foreign Key Constraints">
+    Enabled to maintain referential integrity:
+    ```typescript src/db/connection.ts:24
+    DatabaseConnection.instance.pragma("foreign_keys = ON");
+    ```
+  </Step>
+  
+  <Step title="File Permissions">
+    The database file should only be accessible to the application user:
+    ```bash
+    chmod 600 /app/data/database.sqlite
+    chown nodejs:nodejs /app/data/database.sqlite
+    ```
+  </Step>
+  
+  <Step title="Backup Encryption">
+    Encrypt database backups at rest:
+    ```bash
+    # Backup and encrypt
+    docker cp consensus:/app/data/database.sqlite - | \
+      openssl enc -aes-256-cbc -salt -pbkdf2 -out backup.sqlite.enc
+    
+    # Decrypt and restore
+    openssl enc -aes-256-cbc -d -pbkdf2 -in backup.sqlite.enc | \
+      docker cp - consensus:/app/data/database.sqlite
+    ```
+  </Step>
+</Steps>
+
+### Preventing SQL Injection
+
+Consensus uses parameterized queries via better-sqlite3 prepared statements:
+
+```typescript Example
+// SAFE - Parameterized query
+const stmt = db.prepare("SELECT * FROM voters WHERE id = ?");
+const voter = stmt.get(voterId);
+
+// UNSAFE - String concatenation (NOT used in Consensus)
+// const query = "SELECT * FROM voters WHERE id = '" + voterId + "'";
+```
+
+<Note>
+  All database queries in Consensus use prepared statements, preventing SQL injection attacks.
+</Note>
+
+## Network Security
+
+### HTTPS/TLS
+
+Consensus should always be deployed behind HTTPS in production:
+
+<Steps>
+  <Step title="Use a Reverse Proxy">
+    Deploy nginx, Traefik, or Caddy to handle TLS termination:
+    ```nginx nginx.conf
+    server {
+        listen 443 ssl http2;
+        server_name voting.example.com;
+        
+        ssl_certificate /etc/ssl/certs/voting.crt;
+        ssl_certificate_key /etc/ssl/private/voting.key;
+        
+        # Modern TLS configuration
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers on;
+        
+        location / {
+            proxy_pass http://127.0.0.1:3000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Enable Secure Cookies">
+    Modify `src/web/server.ts:73` to set `secure: true`:
+    ```typescript
+    cookie: {
+        secure: true, // Requires HTTPS
+    }
+    ```
+  </Step>
+  
+  <Step title="Force HTTPS Redirect">
+    Configure your reverse proxy to redirect HTTP to HTTPS:
+    ```nginx
+    server {
+        listen 80;
+        server_name voting.example.com;
+        return 301 https://$server_name$request_uri;
+    }
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  **Never deploy Consensus directly to the internet without HTTPS.** Session cookies and passwords will be transmitted in plaintext.
+</Warning>
+
+### Firewall Configuration
+
+Restrict network access to the Consensus container:
+
+```bash
+# Only allow access from reverse proxy
+iptables -A INPUT -p tcp --dport 3000 -s 127.0.0.1 -j ACCEPT
+iptables -A INPUT -p tcp --dport 3000 -j DROP
+
+# Docker specific (block external access to container)
+docker run -d \
+  --name consensus \
+  -p 127.0.0.1:3000:3000 \
+  consensus:latest
+```
+
+## Maintenance Mode
+
+Consensus includes a maintenance mode feature to block voter access during updates:
+
+```typescript src/web/server.ts:108-120
+if (settings.maintenanceMode && !request.session.isAdmin) {
+    const url = request.url;
+    // Allow admin routes and static files
+    if (!url.startsWith("/admin") && !url.startsWith("/public")) {
+        return reply.status(503).view("maintenance.ejs", {
+            title: "Under Maintenance",
+            message: settings.maintenanceMessage || "We are currently performing maintenance.",
+        });
+    }
+}
+```
+
+<Note>
+  Administrators can still access the system during maintenance mode to perform updates or fixes.
+</Note>
+
+## Security Checklist
+
+### Pre-Deployment
+
+<Steps>
+  <Step title="Secrets">
+    - [ ] Generate strong `SESSION_SECRET` (32+ characters)
+    - [ ] Set secure `CONSENSUS_ADMIN_DEFAULT_PASSWORD`
+    - [ ] Store secrets in environment variables, not code
+    - [ ] Add `.env*` to `.gitignore`
+  </Step>
+  
+  <Step title="Configuration">
+    - [ ] Set `NODE_ENV=production`
+    - [ ] Enable `cookie.secure = true` for HTTPS
+    - [ ] Configure HTTPS reverse proxy
+    - [ ] Set up automatic HTTPS redirects
+  </Step>
+  
+  <Step title="Container">
+    - [ ] Run container as non-root user (default)
+    - [ ] Use read-only root filesystem
+    - [ ] Limit container capabilities
+    - [ ] Scan image for vulnerabilities
+  </Step>
+  
+  <Step title="Database">
+    - [ ] Set restrictive file permissions on database
+    - [ ] Configure automated encrypted backups
+    - [ ] Test backup restoration process
+  </Step>
+</Steps>
+
+### Post-Deployment
+
+<Steps>
+  <Step title="Initial Access">
+    - [ ] Login as admin immediately
+    - [ ] Change default admin password
+    - [ ] Create additional admin accounts if needed
+    - [ ] Disable or delete default admin account
+  </Step>
+  
+  <Step title="Monitoring">
+    - [ ] Monitor application logs for errors
+    - [ ] Set up alerts for failed login attempts
+    - [ ] Review audit logs regularly
+    - [ ] Monitor database size and performance
+  </Step>
+  
+  <Step title="Maintenance">
+    - [ ] Apply security updates promptly
+    - [ ] Rotate `SESSION_SECRET` periodically
+    - [ ] Review and update admin accounts
+    - [ ] Test backup restoration quarterly
+  </Step>
+</Steps>
+
+## Audit Logging
+
+Consensus includes built-in audit logging for election events:
+
+```typescript src/services/observers/ElectionAuditLogger.ts
+export class ElectionAuditLogger implements ElectionObserver {
+    constructor(private auditLogRepository: AuditLogRepository) {}
+
+    onElectionCreated(election: Election): void {
+        // Log election creation
+    }
+
+    onElectionStarted(election: Election): void {
+        // Log election start
+    }
+
+    onElectionClosed(election: Election): void {
+        // Log election closure
+    }
+}
+```
+
+<Note>
+  Audit logs are stored in the database and track all election lifecycle events. Review these logs regularly to detect unauthorized changes.
+</Note>
+
+## Security Monitoring
+
+### Failed Login Attempts
+
+Monitor logs for repeated failed authentication:
+
+```bash
+# View recent failed logins
+docker logs consensus 2>&1 | grep -i "login failed\|authentication failed"
+
+# Count failed attempts by IP
+docker logs consensus 2>&1 | \
+  grep "login failed" | \
+  awk '{print $NF}' | \
+  sort | uniq -c | sort -rn
+```
+
+### Database Access
+
+Monitor database file access:
+
+```bash
+# Check database file permissions
+docker exec consensus ls -lh /app/data/database.sqlite
+
+# Monitor database size
+watch -n 60 'docker exec consensus du -h /app/data/database.sqlite'
+```
+
+### Container Security Events
+
+```bash
+# View security events in container logs
+docker events --filter 'type=container' --filter 'container=consensus'
+
+# Check for unexpected process execution
+docker exec consensus ps aux
+```
+
+## Incident Response
+
+### Suspected Breach
+
+If you suspect a security breach:
+
+<Steps>
+  <Step title="Enable Maintenance Mode">
+    Access the admin settings and enable maintenance mode to block voter access.
+  </Step>
+  
+  <Step title="Backup Current State">
+    ```bash
+    docker cp consensus:/app/data/database.sqlite \
+      ./breach-backup-$(date +%Y%m%d-%H%M%S).sqlite
+    ```
+  </Step>
+  
+  <Step title="Review Audit Logs">
+    Check the audit logs for suspicious activity:
+    ```sql
+    SELECT * FROM audit_logs 
+    ORDER BY created_at DESC 
+    LIMIT 100;
+    ```
+  </Step>
+  
+  <Step title="Rotate Secrets">
+    Generate and deploy new `SESSION_SECRET` (invalidates all sessions).
+  </Step>
+  
+  <Step title="Force Password Resets">
+    Require all administrators to change passwords immediately.
+  </Step>
+</Steps>
+
+## Compliance Considerations
+
+### Data Protection
+
+Consensus stores personal information (voter names, emails, passwords):
+
+- **Encryption at Rest:** Encrypt the database file or volume
+- **Encryption in Transit:** Always use HTTPS
+- **Data Retention:** Implement policies for deleting old election data
+- **Access Controls:** Limit admin access to authorized personnel only
+
+### Election Integrity
+
+- **Vote Secrecy:** Votes are anonymized after casting
+- **Audit Trail:** All election events are logged
+- **Tamper Detection:** Database integrity can be verified through backups
+- **Access Logging:** Monitor who accesses election results
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Deployment" icon="docker" href="/deployment/docker">
+    Deploy Consensus using Docker
+  </Card>
+  <Card title="Configuration" icon="gear" href="/deployment/configuration">
+    Configure environment variables
+  </Card>
+</CardGroup>

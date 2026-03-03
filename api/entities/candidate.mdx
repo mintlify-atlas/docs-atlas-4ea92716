@@ -1,0 +1,234 @@
+---
+title: "Candidate"
+description: "Domain entity representing a candidate in an election with encapsulated profile information"
+---
+
+## Overview
+
+The `Candidate` class is a domain entity that represents a candidate participating in an election. It encapsulates candidate profile information including name, party affiliation, and biography with controlled mutation through setters.
+
+## Constructor
+
+```typescript
+new Candidate(
+  candidateID: string,
+  electionID: string,
+  name: string,
+  party: string,
+  biography: string
+)
+```
+
+<ParamField path="candidateID" type="string" required>
+  Unique identifier for the candidate
+</ParamField>
+
+<ParamField path="electionID" type="string" required>
+  ID of the election the candidate is participating in
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Full name of the candidate (cannot be empty)
+</ParamField>
+
+<ParamField path="party" type="string" required>
+  Political party or affiliation of the candidate
+</ParamField>
+
+<ParamField path="biography" type="string" required>
+  Biographical information about the candidate
+</ParamField>
+
+### Example
+
+```typescript
+const candidate = new Candidate(
+  "candidate-123",
+  "election-456",
+  "Jane Smith",
+  "Progressive Party",
+  "Jane Smith has 15 years of experience in public service..."
+);
+```
+
+## Properties
+
+<ResponseField name="candidateID" type="string" required>
+  Unique identifier for the candidate (read-only)
+</ResponseField>
+
+<ResponseField name="electionID" type="string" required>
+  ID of the election the candidate is participating in (read-only)
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Full name of the candidate. Can be updated via setter with validation.
+</ResponseField>
+
+<ResponseField name="party" type="string" required>
+  Political party or affiliation of the candidate. Can be updated via setter.
+</ResponseField>
+
+<ResponseField name="biography" type="string" required>
+  Biographical information about the candidate. Can be updated via setter.
+</ResponseField>
+
+## Setters
+
+### name
+
+Updates the candidate's name with validation.
+
+```typescript
+candidate.name = "Jane M. Smith";
+```
+
+**Validation:**
+- Throws `Error` if name is empty or contains only whitespace
+- Error message: "Candidate name cannot be empty"
+
+### party
+
+Updates the candidate's party affiliation.
+
+```typescript
+candidate.party = "Independent";
+```
+
+**Validation:** None. Party can be set to any string value including empty string.
+
+### biography
+
+Updates the candidate's biographical information.
+
+```typescript
+candidate.biography = "Updated biography with more details...";
+```
+
+**Validation:** None. Biography can be set to any string value including empty string.
+
+## Usage Example
+
+```typescript
+import { Candidate } from "./domain/entities/Candidate";
+
+// Create a new candidate
+const candidate = new Candidate(
+  "candidate-001",
+  "election-2024",
+  "John Doe",
+  "Democratic Party",
+  "John Doe is a community organizer with 10 years of experience."
+);
+
+// Access candidate information
+console.log(candidate.candidateID); // "candidate-001"
+console.log(candidate.name); // "John Doe"
+console.log(candidate.party); // "Democratic Party"
+
+// Update candidate information
+candidate.name = "John M. Doe";
+candidate.biography = "John M. Doe is a community organizer and advocate...";
+
+// Change party affiliation
+candidate.party = "Independent";
+```
+
+## Validation Rules
+
+### Name Validation
+
+The candidate name is validated when set:
+
+```typescript
+const candidate = new Candidate(
+  "c1",
+  "e1",
+  "Initial Name",
+  "Party",
+  "Bio"
+);
+
+// Valid update
+candidate.name = "Updated Name"; // ✓ Works
+
+// Invalid updates
+candidate.name = ""; // ✗ Throws: "Candidate name cannot be empty"
+candidate.name = "   "; // ✗ Throws: "Candidate name cannot be empty"
+```
+
+### Party and Biography
+
+Party and biography setters have no validation constraints:
+
+```typescript
+// All of these are valid
+candidate.party = "New Party"; // ✓ Works
+candidate.party = ""; // ✓ Works (empty string allowed)
+
+candidate.biography = "Updated bio"; // ✓ Works
+candidate.biography = ""; // ✓ Works (empty string allowed)
+```
+
+## Design Notes
+
+### Encapsulation
+
+The `Candidate` entity uses TypeScript's private fields with getter/setter pattern:
+
+- **Private fields** (prefixed with `_`): Store actual data
+- **Getters**: Provide read access to all properties
+- **Setters**: Control write access with validation where needed
+
+This ensures:
+- Data integrity through validation
+- Controlled mutation of state
+- Clear API for property access
+
+### Immutable Properties
+
+The following properties are read-only after construction:
+- `candidateID` - Cannot be changed (no setter)
+- `electionID` - Cannot be changed (no setter)
+
+This prevents candidates from being reassigned to different elections or having their identifiers changed.
+
+## Common Use Cases
+
+### Adding Candidate to Election
+
+```typescript
+import { Election } from "./domain/entities/Election";
+import { Candidate } from "./domain/entities/Candidate";
+import { ElectionType, ElectionStatus } from "./domain/enums";
+
+const election = new Election(
+  "election-1",
+  "City Council Election",
+  ElectionType.FPTP,
+  new Date("2024-06-01"),
+  new Date("2024-06-15"),
+  "Annual city council election"
+);
+
+const candidate = new Candidate(
+  "candidate-1",
+  "election-1",
+  "Alice Johnson",
+  "Progressive Party",
+  "Community leader and educator"
+);
+
+// Add candidate to election (only works in DRAFT status)
+election.addCandidate(candidate);
+```
+
+### Updating Candidate Profile
+
+```typescript
+// Update candidate information during campaign
+candidate.biography = `${candidate.biography} Recently awarded Community Service Medal.`;
+
+// Candidate switches to independent
+candidate.party = "Independent";
+```

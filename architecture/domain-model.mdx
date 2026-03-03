@@ -1,0 +1,361 @@
+---
+title: Domain Model
+description: Core entities, relationships, and business logic in the Consensus platform
+---
+
+## Overview
+
+The domain model represents the core business concepts of the e-voting system. All entities are implemented as TypeScript classes with encapsulated state and business logic.
+
+## Entity Relationships
+
+```
+┌──────────┐         ┌──────────────┐         ┌────────────┐
+│  Voter   │◄────────│ VoteConfirm  │         │   Ballot   │
+│          │   1:N   │   ation      │         │ (Anonymous)│
+└──────────┘         └──────────────┘         └────────────┘
+     │                      │                        │
+     │ N:M                  │ N:1                    │ N:1
+     │                      ▼                        │
+     │              ┌──────────────┐                 │
+     └─────────────►│   Election   │◄────────────────┘
+                    │              │
+                    └──────────────┘
+                           │ 1:N
+                           ▼
+                    ┌──────────────┐
+                    │  Candidate   │
+                    └──────────────┘
+
+                    ┌──────────────┐
+                    │    Admin     │
+                    └──────────────┘
+```
+
+**Key Design Decision:** Ballots are intentionally **not** linked to voters to ensure vote anonymity. Instead, `VoteConfirmation` records prove a voter participated without revealing their choices.
+
+## Core Entities
+
+### Voter
+
+**Location:** `src/domain/entities/Voter.ts`
+
+**Purpose:** Represents a registered user who can cast votes
+
+**Key Attributes:**
+```typescript
+private _voterID: string;           // Unique identifier
+private _name: string;              // Full name
+private _email: string;             // Email (login credential)
+private _passwordHash: string;      // Hashed password
+private _registrationStatus: RegistrationStatus;
+private _registrationDate: Date;
+```
+
+**Business Methods:**
+```typescript
+// From src/domain/entities/Voter.ts:78-89
+isApproved(): boolean {
+    return this._registrationStatus === RegistrationStatus.APPROVED;
+}
+
+isSuspended(): boolean {
+    return this._registrationStatus === RegistrationStatus.SUSPENDED;
+}
+
+canVote(): boolean {
+    return this.isApproved() && !this.isSuspended();
+}
+```
+
+**Validation:**
+```typescript
+// From src/domain/entities/Voter.ts:60-65
+set email(value: string) {
+    if (!value || !value.includes("@")) {
+        throw new Error("Invalid email address");
+    }
+    this._email = value;
+}
+```
+
+**Registration States:**
+- `PENDING` - Awaiting admin approval
+- `APPROVED` - Can participate in elections
+- `REJECTED` - Registration denied
+- `SUSPENDED` - Temporarily blocked
+
+### Election
+
+**Location:** `src/domain/entities/Election.ts`
+
+**Purpose:** Represents a voting event with candidates and configuration
+
+**Key Attributes:**
+```typescript
+private _electionID: string;
+private _name: string;
+private _electionType: ElectionType;  // FPTP, STV, AV, PREFERENTIAL
+private _status: ElectionStatus;      // DRAFT, ACTIVE, CLOSED
+private _startDate: Date;
+private _endDate: Date;
+private _description: string;
+private _candidates: Candidate[];
+```
+
+**Election Types:**
+- `FPTP` - First Past The Post (single choice)
+- `STV` - Single Transferable Vote (ranked choice)
+- `AV` - Alternative Vote (ranked choice, single winner)
+- `PREFERENTIAL` - Generic preferential voting
+
+**Status Lifecycle:**
+```
+DRAFT → ACTIVE → CLOSED
+```
+
+**Business Logic:**
+```typescript
+// From src/domain/entities/Election.ts:79-86
+isActive(): boolean {
+    const now = new Date();
+    return this._status === ElectionStatus.ACTIVE 
+        && now >= this._startDate 
+        && now <= this._endDate;
+}
+
+isClosed(): boolean {
+    return this._status === ElectionStatus.CLOSED;
+}
+```
+
+**Invariant Enforcement:**
+```typescript
+// From src/domain/entities/Election.ts:88-93
+addCandidate(candidate: Candidate): void {
+    if (this._status !== ElectionStatus.DRAFT) {
+        throw new Error("Cannot add candidates to non-draft election");
+    }
+    this._candidates.push(candidate);
+}
+```
+
+### Candidate
+
+**Location:** `src/domain/entities/Candidate.ts`
+
+**Purpose:** Represents a person/option on an election ballot
+
+**Key Attributes:**
+```typescript
+private _candidateID: string;
+private _electionID: string;  // Foreign key to Election
+private _name: string;
+private _party: string;
+private _biography: string;
+```
+
+**Validation:**
+```typescript
+// From src/domain/entities/Candidate.ts:38-43
+set name(value: string) {
+    if (!value || value.trim().length === 0) {
+        throw new Error("Candidate name cannot be empty");
+    }
+    this._name = value;
+}
+```
+
+### Ballot
+
+**Location:** `src/domain/entities/Ballot.ts`
+
+**Purpose:** An anonymous vote record with no voter linkage
+
+**Key Attributes:**
+```typescript
+public readonly ballotID: string;
+public readonly electionID: string;
+public readonly preferences: string[];  // Candidate IDs in preference order
+public readonly castAt: Date;
+```
+
+**Design Notes:**
+- Immutable (readonly fields) - ballots cannot be changed after casting
+- **No voterID field** - ensures vote anonymity
+- `preferences` array supports both single-choice (FPTP) and ranked-choice (STV/AV) voting
+
+**Utility Methods:**
+```typescript
+// From src/domain/entities/Ballot.ts:12-22
+isFor(candidateID: string): boolean {
+    return this.preferences.includes(candidateID);
+}
+
+getPreferenceRank(candidateID: string): number | null {
+    const index = this.preferences.indexOf(candidateID);
+    return index >= 0 ? index + 1 : null;
+}
+```
+
+### VoteConfirmation
+
+**Location:** `src/domain/entities/VoteConfirmation.ts`
+
+**Purpose:** Proves a voter participated in an election without revealing their vote
+
+**Key Attributes:**
+```typescript
+public readonly confirmationID: string;
+public readonly voterID: string;     // Links to voter
+public readonly electionID: string;  // Links to election
+public readonly confirmedAt: Date;   // Timestamp
+// NOTE: No ballot reference or vote details
+```
+
+**Privacy Design:**
+This entity enables the system to:
+1. Prove to voters they successfully voted
+2. Prevent double voting (one confirmation per voter per election)
+3. **Maintain anonymity** - no information about vote choices
+
+### Admin
+
+**Location:** `src/domain/entities/Admin.ts`
+
+**Purpose:** System administrator with elevated privileges
+
+**Key Attributes:**
+```typescript
+public readonly adminID: string;
+public readonly username: string;
+public readonly passwordHash: string;
+public readonly name: string;
+public readonly createdAt: Date;
+public readonly mustChangePassword: boolean;
+```
+
+**Capabilities:**
+- Create and manage elections
+- Approve/reject voter registrations
+- View results and audit logs
+- Resolve tied elections
+- Configure system settings
+
+## Supporting Entities
+
+### VoterEligibility
+
+**Purpose:** Tracks which voters are eligible and have voted in each election
+
+**Relationship:** Junction table between Voter and Election with voting status
+
+### ElectionEvent
+
+**Location:** `src/domain/entities/ElectionEvent.ts`
+
+**Purpose:** Represents a state change event for Observer pattern
+
+**Attributes:**
+```typescript
+public readonly election: Election;
+public readonly previousStatus: ElectionStatus;
+public readonly newStatus: ElectionStatus;
+public readonly timestamp: Date;
+```
+
+**Usage:** Emitted when elections transition states (DRAFT→ACTIVE→CLOSED)
+
+### AuditEntry
+
+**Purpose:** Immutable log record of election state changes
+
+**Attributes:**
+- Election details
+- Status transition
+- Timestamp
+
+## Enumerations
+
+### RegistrationStatus
+```typescript
+enum RegistrationStatus {
+    PENDING,
+    APPROVED,
+    REJECTED,
+    SUSPENDED
+}
+```
+
+### ElectionStatus
+```typescript
+enum ElectionStatus {
+    DRAFT,    // Being configured
+    ACTIVE,   // Accepting votes
+    CLOSED    // Voting ended, results available
+}
+```
+
+### ElectionType
+```typescript
+enum ElectionType {
+    FPTP,          // First Past The Post
+    STV,           // Single Transferable Vote
+    AV,            // Alternative Vote
+    PREFERENTIAL   // Generic preferential
+}
+```
+
+## Business Rules
+
+### Vote Casting Rules
+
+1. **Voter Eligibility:**
+   - Must have `APPROVED` registration status
+   - Cannot be `SUSPENDED`
+   - Implemented in `Voter.canVote():78-89`
+
+2. **Election State:**
+   - Election must be `ACTIVE`
+   - Current time must be within `startDate` and `endDate`
+   - Validated in `VotingService.castVote()`
+
+3. **One Vote Per Election:**
+   - Enforced via `VoterEligibility` table
+   - Checked before allowing vote submission
+
+### Election Lifecycle Rules
+
+1. **Draft State:**
+   - Can add/remove candidates
+   - Can modify settings
+   - Cannot accept votes
+
+2. **Activation Requirements:**
+   - Must have at least 2 candidates
+   - Enforced in `ElectionService.activateElection():168-171`
+
+3. **Closed State:**
+   - Immutable - no further votes
+   - Results become available
+
+## Data Validation
+
+All entities enforce validation through setters:
+
+```typescript
+// Example from Election entity
+set name(value: string) {
+    if (!value || value.trim().length === 0) {
+        throw new Error("Election name cannot be empty");
+    }
+    this._name = value;
+}
+```
+
+This ensures **invalid entities cannot exist** in the system.
+
+## Next Steps
+
+- [Design Patterns](/architecture/design-patterns) - How patterns organize domain logic
+- [Data Layer](/architecture/data-layer) - How entities are persisted

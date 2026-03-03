@@ -1,0 +1,307 @@
+---
+title: "ElectionService"
+description: "Manages election lifecycle including creation, candidate management, and status transitions"
+---
+
+## Overview
+
+The `ElectionService` handles all business logic related to elections in the Consensus e-voting platform. It manages the complete election lifecycle from draft creation through activation and closure, implements the Observer pattern for election state changes, and enforces validation rules for election integrity.
+
+## Constructor
+
+```typescript
+constructor(
+    electionRepository: IElectionRepository,
+    candidateRepository: ICandidateRepository,
+    eventEmitter?: ElectionEventEmitter
+)
+```
+
+<ParamField path="electionRepository" type="IElectionRepository" required>
+  Repository for election data persistence
+</ParamField>
+
+<ParamField path="candidateRepository" type="ICandidateRepository" required>
+  Repository for candidate data persistence
+</ParamField>
+
+<ParamField path="eventEmitter" type="ElectionEventEmitter">
+  Optional event emitter for Observer pattern notifications (created automatically if not provided)
+</ParamField>
+
+## Methods
+
+### createElection
+
+Creates a new election in DRAFT status.
+
+```typescript
+createElection(dto: ElectionCreationDTO): Election
+```
+
+<ParamField path="dto" type="ElectionCreationDTO" required>
+  Election creation data
+  
+  **ElectionCreationDTO:**
+  - `name: string` - Election name
+  - `electionType: ElectionType` - Type (FPTP, STV, AV, PREFERENTIAL)
+  - `startDate: Date` - Election start date
+  - `endDate: Date` - Election end date
+  - `description: string` - Election description
+</ParamField>
+
+<ResponseField name="Election" type="Election">
+  The newly created election entity with DRAFT status
+</ResponseField>
+
+**Throws:**
+- `"End date must be after start date"` - Invalid date range
+- `"Start date cannot be in the past"` - Start date before current date
+
+**Example:**
+
+```typescript
+const dto: ElectionCreationDTO = {
+    name: "Test Election",
+    electionType: ElectionType.FPTP,
+    startDate: new Date('2026-04-01'),
+    endDate: new Date('2026-04-07'),
+    description: "A test election"
+};
+
+const election = service.createElection(dto);
+console.log(election.status); // ElectionStatus.DRAFT
+```
+
+### addCandidate
+
+Adds a candidate to a draft election.
+
+```typescript
+addCandidate(electionID: string, dto: CandidateCreationDTO): Candidate
+```
+
+<ParamField path="electionID" type="string" required>
+  ID of the election to add the candidate to
+</ParamField>
+
+<ParamField path="dto" type="CandidateCreationDTO" required>
+  Candidate data
+  
+  **CandidateCreationDTO:**
+  - `name: string` - Candidate name
+  - `party: string` - Political party affiliation
+  - `biography: string` - Candidate biography
+</ParamField>
+
+<ResponseField name="Candidate" type="Candidate">
+  The newly created candidate entity
+</ResponseField>
+
+**Throws:**
+- `"Election not found"` - Invalid election ID
+- `"Cannot add candidates to non-draft elections"` - Election is already active or closed
+
+**Example:**
+
+```typescript
+const candidate = service.addCandidate(election.electionID, {
+    name: "John Smith",
+    party: "Independent",
+    biography: "Experienced community leader"
+});
+```
+
+### removeCandidate
+
+Removes a candidate from a draft election.
+
+```typescript
+removeCandidate(electionID: string, candidateID: string): void
+```
+
+<ParamField path="electionID" type="string" required>
+  ID of the election
+</ParamField>
+
+<ParamField path="candidateID" type="string" required>
+  ID of the candidate to remove
+</ParamField>
+
+**Throws:**
+- `"Election not found"` - Invalid election ID
+- `"Cannot remove candidates from non-draft elections"` - Election is already active or closed
+- `"Candidate not found"` - Invalid candidate ID
+- `"Candidate does not belong to this election"` - Candidate/election mismatch
+
+### getElectionById
+
+Retrieves an election by its ID.
+
+```typescript
+getElectionById(electionID: string): Election | null
+```
+
+<ParamField path="electionID" type="string" required>
+  ID of the election to retrieve
+</ParamField>
+
+<ResponseField name="Election | null" type="Election | null">
+  The election entity if found, otherwise null
+</ResponseField>
+
+### getCandidates
+
+Retrieves all candidates for a specific election.
+
+```typescript
+getCandidates(electionID: string): Candidate[]
+```
+
+<ParamField path="electionID" type="string" required>
+  ID of the election
+</ParamField>
+
+<ResponseField name="Candidate[]" type="Candidate[]">
+  Array of candidate entities for the election
+</ResponseField>
+
+### getActiveElections
+
+Retrieves all currently active elections.
+
+```typescript
+getActiveElections(): Election[]
+```
+
+<ResponseField name="Election[]" type="Election[]">
+  Array of active election entities
+</ResponseField>
+
+### getAllElections
+
+Retrieves all elections regardless of status.
+
+```typescript
+getAllElections(): Election[]
+```
+
+<ResponseField name="Election[]" type="Election[]">
+  Array of all election entities
+</ResponseField>
+
+### getClosedElections
+
+Retrieves all closed elections.
+
+```typescript
+getClosedElections(): Election[]
+```
+
+<ResponseField name="Election[]" type="Election[]">
+  Array of closed election entities
+</ResponseField>
+
+### activateElection
+
+Activates a draft election, making it available for voting.
+
+```typescript
+activateElection(electionID: string): void
+```
+
+<ParamField path="electionID" type="string" required>
+  ID of the election to activate
+</ParamField>
+
+**Throws:**
+- `"Election not found"` - Invalid election ID
+- `"Election must have at least 2 candidates"` - Insufficient candidates
+
+**Notes:**
+- Triggers Observer pattern notification to all subscribers
+- Changes election status from DRAFT to ACTIVE
+
+**Example:**
+
+```typescript
+service.addCandidate(electionID, { name: "C1", party: "P1", biography: "B1" });
+service.addCandidate(electionID, { name: "C2", party: "P2", biography: "B2" });
+service.activateElection(electionID);
+```
+
+### closeElection
+
+Closes an election, preventing further votes.
+
+```typescript
+closeElection(electionID: string): void
+```
+
+<ParamField path="electionID" type="string" required>
+  ID of the election to close
+</ParamField>
+
+**Throws:**
+- `"Election not found"` - Invalid election ID
+
+**Notes:**
+- Triggers Observer pattern notification to all subscribers
+- Changes election status to CLOSED
+- Results become available after closure
+
+### deleteElection
+
+Deletes a draft election and all its candidates.
+
+```typescript
+deleteElection(electionID: string): void
+```
+
+<ParamField path="electionID" type="string" required>
+  ID of the election to delete
+</ParamField>
+
+**Throws:**
+- `"Election not found"` - Invalid election ID
+- `"Only draft elections can be deleted"` - Election is active or closed
+
+**Notes:**
+- Automatically deletes all associated candidates
+- Cannot delete active or closed elections
+
+### getEventEmitter
+
+Returns the event emitter to allow external code to subscribe observers.
+
+```typescript
+getEventEmitter(): ElectionEventEmitter
+```
+
+<ResponseField name="ElectionEventEmitter" type="ElectionEventEmitter">
+  The event emitter instance for subscribing to election state changes
+</ResponseField>
+
+**Example:**
+
+```typescript
+const emitter = service.getEventEmitter();
+emitter.subscribe(myObserver);
+```
+
+## Related Types
+
+### ElectionStatus
+
+Enum representing election lifecycle states:
+- `DRAFT` - Election created but not yet active
+- `ACTIVE` - Election open for voting
+- `CLOSED` - Election ended, results available
+
+### ElectionType
+
+Enum representing voting systems:
+- `FPTP` - First Past The Post
+- `STV` - Single Transferable Vote
+- `AV` - Alternative Vote
+- `PREFERENTIAL` - Preferential voting

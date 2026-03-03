@@ -1,0 +1,294 @@
+---
+title: Voter Guide
+description: Complete guide for voters using the Consensus e-voting platform
+---
+
+This guide will help you navigate the Consensus platform as a voter, from registration through casting your vote.
+
+## Getting Started
+
+### Voter Registration
+
+Before you can vote, you need to register for an account.
+
+<Steps>
+  <Step title="Navigate to Registration">
+    Go to the registration page by clicking the "Register" link on the homepage or navigating to `/register`.
+  </Step>
+  
+  <Step title="Fill Out Registration Form">
+    Provide the following information:
+    - **Name**: Your full name
+    - **Email**: A valid email address
+    - **Password**: A secure password for your account
+    
+    Complete any CAPTCHA verification if enabled.
+  </Step>
+  
+  <Step title="Submit Registration">
+    Click the registration button to submit your information. You'll be automatically logged in and redirected to a success page.
+  </Step>
+  
+  <Step title="Wait for Approval">
+    Your registration will be reviewed by an administrator. You'll see one of three statuses:
+    - **Pending**: Awaiting admin approval (you cannot vote yet)
+    - **Approved**: You can now participate in elections
+    - **Rejected**: Your registration was not approved (contact an administrator)
+  </Step>
+</Steps>
+
+<Tip>
+If your organization has auto-approval enabled, you'll be approved automatically and can vote immediately!
+</Tip>
+
+### Logging In
+
+Once registered, you can log in to access your voter dashboard.
+
+<Steps>
+  <Step title="Navigate to Login">
+    Go to `/login` or click the "Login" link from the homepage.
+  </Step>
+  
+  <Step title="Enter Credentials">
+    Provide your registered email and password.
+  </Step>
+  
+  <Step title="Access Dashboard">
+    After successful login, you'll be redirected to your voter dashboard at `/dashboard`.
+  </Step>
+</Steps>
+
+## Voter Dashboard
+
+Your dashboard is your central hub for all voting activities. It displays:
+
+- **Registration Status**: Whether you're pending, approved, or rejected
+- **Pending Votes**: Number of elections awaiting your vote
+- **Votes Cast**: Total number of elections you've voted in
+- **Voter Status**: Shows "Verified" when approved
+- **Quick Actions**: Direct links to vote in available elections
+- **Recent Activity**: Your recent voting history
+
+<Note>
+If your registration is pending, you'll see a notice on your dashboard and won't be able to vote until approved.
+</Note>
+
+## Casting Your Vote
+
+### Finding Elections
+
+There are two ways to find available elections:
+
+1. **From Your Dashboard**: Click on any election listed under "Quick Actions"
+2. **Browse All Elections**: Navigate to `/elections` to see all active elections
+
+### Voting Process
+
+<Steps>
+  <Step title="Select an Election">
+    Click on an election you want to vote in. You'll only see elections that:
+    - Are currently open (between start and end dates)
+    - You haven't already voted in
+    - You're approved to vote in
+  </Step>
+  
+  <Step title="Review Election Details">
+    On the voting page, you'll see:
+    - Election name and description
+    - Election type (FPTP, STV, AV, or Preferential)
+    - List of candidates with their party and biography
+    - Start and end dates
+  </Step>
+  
+  <Step title="Make Your Selection">
+    Depending on the election type:
+    
+    **First Past The Post (FPTP)**:
+    - Select one candidate by clicking their radio button
+    
+    **STV/AV/Preferential**:
+    - Rank candidates in order of preference
+    - Drag and drop candidates to reorder them
+    - You can rank all or just some candidates
+  </Step>
+  
+  <Step title="Complete CAPTCHA">
+    If enabled, complete the CAPTCHA verification.
+  </Step>
+  
+  <Step title="Submit Your Vote">
+    Click the "Cast Vote" button to submit your ballot.
+  </Step>
+  
+  <Step title="Receive Confirmation">
+    You'll be redirected to a confirmation page showing:
+    - Confirmation ID (unique identifier for your vote)
+    - Timestamp of when you voted
+    - Election name
+    
+    Save or print this confirmation for your records.
+  </Step>
+</Steps>
+
+<Warning>
+Once you cast your vote, you cannot change it. Make sure you're satisfied with your selection before submitting.
+</Warning>
+
+### Understanding Election Types
+
+**First Past The Post (FPTP)**
+- Choose one candidate
+- The candidate with the most votes wins
+- Simple majority system
+
+**Single Transferable Vote (STV)**
+- Rank candidates in order of preference
+- Votes are transferred if your first choice is eliminated
+- Ensures proportional representation
+
+**Alternative Vote (AV)**
+- Similar to STV but for single-winner elections
+- Rank candidates by preference
+- If no candidate gets 50%, lowest is eliminated and votes redistributed
+
+**Preferential Voting**
+- Rank candidates in order of preference
+- Your preferences are used to determine the winner
+
+## Managing Your Account
+
+### Viewing Your Profile
+
+Navigate to `/profile` to view and update your account information.
+
+### Updating Your Information
+
+<Steps>
+  <Step title="Go to Profile Page">
+    Click on your name or navigate to `/profile`.
+  </Step>
+  
+  <Step title="Update Details">
+    You can modify:
+    - **Name**: Update your display name
+    - **Email**: Change your email address
+    - **Password**: Set a new password (requires current password)
+  </Step>
+  
+  <Step title="Save Changes">
+    Click "Update Profile" to save your changes.
+  </Step>
+</Steps>
+
+### Viewing Your Voting History
+
+Navigate to `/confirmations` to see all your past votes, including:
+- Election names
+- Vote timestamps
+- Confirmation codes
+
+<Steps>
+  <Step title="Access Voting Record">
+    Navigate to `/confirmations` or click "My Voting Record" from your dashboard.
+  </Step>
+  
+  <Step title="View Confirmations">
+    See a list of all elections you've voted in with confirmation details.
+  </Step>
+  
+  <Step title="Print Receipts">
+    Click on any confirmation to view a printable receipt.
+  </Step>
+</Steps>
+
+## Best Practices
+
+<Tip>
+**Secure Your Account**
+- Use a strong, unique password
+- Don't share your login credentials
+- Log out after voting on shared computers
+</Tip>
+
+<Tip>
+**Save Your Confirmations**
+- Print or screenshot your vote confirmation
+- Store confirmation codes securely
+- Use confirmations to verify your vote was recorded
+</Tip>
+
+<Tip>
+**Vote on Time**
+- Check election end dates
+- Vote early to avoid last-minute technical issues
+- Elections close automatically at the end date
+</Tip>
+
+<Tip>
+**Research Candidates**
+- Review candidate biographies and party affiliations
+- Take your time to make an informed decision
+- You cannot change your vote after submission
+</Tip>
+
+## Troubleshooting
+
+### I can't log in
+- Verify your email and password are correct
+- Check if login is enabled (may be temporarily disabled by administrators)
+- Contact an administrator if you've forgotten your password
+
+### My registration is pending
+- Wait for an administrator to review your registration
+- Contact an administrator if it's been pending for an extended period
+- Check your voter status on the dashboard
+
+### I can't see any elections
+- Make sure you're approved to vote (check dashboard status)
+- Elections must be active and within their voting period
+- You won't see elections you've already voted in
+
+### I already voted in this election
+- Each voter can only vote once per election
+- Check your voting history at `/confirmations` to verify
+- Contact an administrator if you believe this is an error
+
+## Account Deletion
+
+You have the right to delete your account under GDPR.
+
+<Steps>
+  <Step title="Go to Profile">
+    Navigate to `/profile`.
+  </Step>
+  
+  <Step title="Find Delete Account Section">
+    Scroll to the account deletion section.
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    Enter your password to confirm account deletion.
+  </Step>
+  
+  <Step title="Account Removed">
+    Your account and personal data will be permanently deleted.
+  </Step>
+</Steps>
+
+<Warning>
+Account deletion is permanent and cannot be undone. All your voting confirmations will also be removed.
+</Warning>
+
+## Security & Privacy
+
+Consensus takes your privacy seriously:
+
+- **Anonymous Voting**: Your vote is separated from your identity
+- **Secure Storage**: Passwords are securely hashed
+- **Vote Confirmations**: Cryptographic proof of your vote without revealing choices
+- **GDPR Compliant**: Right to access and delete your data
+
+<Note>
+Administrators cannot see who you voted for, only that you voted in a particular election.
+</Note>

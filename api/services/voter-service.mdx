@@ -1,0 +1,268 @@
+---
+title: "VoterService"
+description: "Manages voter registration, approval, and profile management"
+---
+
+## Overview
+
+The `VoterService` handles all business logic related to voter management in the Consensus e-voting platform. It manages voter registration, approval workflows, profile updates, and account deletion (GDPR compliance).
+
+## Constructor
+
+```typescript
+constructor(voterRepository: IVoterRepository)
+```
+
+<ParamField path="voterRepository" type="IVoterRepository" required>
+  Repository for voter data persistence
+</ParamField>
+
+## Methods
+
+### registerVoter
+
+Registers a new voter in the system.
+
+```typescript
+registerVoter(dto: VoterRegistrationDTO, autoApprove: boolean = false): Voter
+```
+
+<ParamField path="dto" type="VoterRegistrationDTO" required>
+  Voter registration data
+  
+  **VoterRegistrationDTO:**
+  - `name: string` - Voter's full name
+  - `email: string` - Voter's email address (must be unique)
+  - `password: string` - Password (minimum 8 characters)
+</ParamField>
+
+<ParamField path="autoApprove" type="boolean" default="false">
+  Whether to automatically approve the voter (sets status to APPROVED instead of PENDING)
+</ParamField>
+
+<ResponseField name="Voter" type="Voter">
+  The newly created voter entity with PENDING or APPROVED status
+</ResponseField>
+
+**Throws:**
+- `"Email already registered"` - Email address is already in use
+- `"Invalid email format"` - Email does not match valid format
+- `"Password must be at least 8 characters"` - Password too short
+
+**Example:**
+
+```typescript
+const validDTO: VoterRegistrationDTO = {
+    name: "John Doe",
+    email: "john@example.com",
+    password: "securePassword123"
+};
+
+const voter = service.registerVoter(validDTO);
+console.log(voter.registrationStatus); // RegistrationStatus.PENDING
+
+// Auto-approve for testing
+const approvedVoter = service.registerVoter(validDTO, true);
+console.log(approvedVoter.registrationStatus); // RegistrationStatus.APPROVED
+```
+
+### getVoterById
+
+Retrieves a voter by their ID.
+
+```typescript
+getVoterById(voterID: string): Voter | null
+```
+
+<ParamField path="voterID" type="string" required>
+  ID of the voter to retrieve
+</ParamField>
+
+<ResponseField name="Voter | null" type="Voter | null">
+  The voter entity if found, otherwise null
+</ResponseField>
+
+### getVoterByEmail
+
+Retrieves a voter by their email address (used for login).
+
+```typescript
+getVoterByEmail(email: string): Voter | null
+```
+
+<ParamField path="email" type="string" required>
+  Email address of the voter
+</ParamField>
+
+<ResponseField name="Voter | null" type="Voter | null">
+  The voter entity if found, otherwise null
+</ResponseField>
+
+**Example:**
+
+```typescript
+const voter = service.getVoterByEmail("bob@example.com");
+if (voter) {
+    console.log(voter.name); // "Bob"
+}
+```
+
+### approveVoter
+
+Approves a pending voter registration.
+
+```typescript
+approveVoter(voterID: string): void
+```
+
+<ParamField path="voterID" type="string" required>
+  ID of the voter to approve
+</ParamField>
+
+**Throws:**
+- `"Voter not found"` - Invalid voter ID
+
+**Notes:**
+- Changes voter's registration status to APPROVED
+- Only approved voters can cast votes
+
+**Example:**
+
+```typescript
+service.approveVoter(registeredVoter.voterID);
+const updated = service.getVoterById(registeredVoter.voterID);
+console.log(updated?.registrationStatus); // RegistrationStatus.APPROVED
+```
+
+### rejectVoter
+
+Rejects a pending voter registration.
+
+```typescript
+rejectVoter(voterID: string): void
+```
+
+<ParamField path="voterID" type="string" required>
+  ID of the voter to reject
+</ParamField>
+
+**Throws:**
+- `"Voter not found"` - Invalid voter ID
+
+**Notes:**
+- Changes voter's registration status to REJECTED
+- Rejected voters cannot cast votes
+
+### getAllVoters
+
+Retrieves all registered voters.
+
+```typescript
+getAllVoters(): Voter[]
+```
+
+<ResponseField name="Voter[]" type="Voter[]">
+  Array of all voter entities
+</ResponseField>
+
+**Example:**
+
+```typescript
+const voters = service.getAllVoters();
+console.log(voters.length); // Total number of registered voters
+```
+
+### updateVoter
+
+Updates a voter's profile information.
+
+```typescript
+updateVoter(
+    voterID: string, 
+    updates: { name?: string; email?: string; passwordHash?: string }
+): Voter
+```
+
+<ParamField path="voterID" type="string" required>
+  ID of the voter to update
+</ParamField>
+
+<ParamField path="updates" type="object" required>
+  Object containing fields to update:
+  - `name?: string` - New name
+  - `email?: string` - New email (must be unique and valid)
+  - `passwordHash?: string` - New password hash
+</ParamField>
+
+<ResponseField name="Voter" type="Voter">
+  The updated voter entity
+</ResponseField>
+
+**Throws:**
+- `"Voter not found"` - Invalid voter ID
+- `"Email already registered"` - New email is already in use
+- `"Invalid email format"` - New email does not match valid format
+
+**Notes:**
+- Only provided fields are updated
+- Email uniqueness is validated when changing email
+- Email format is validated when changing email
+
+**Example:**
+
+```typescript
+const updated = service.updateVoter(voterID, {
+    name: "Jane Smith",
+    email: "jane.smith@example.com"
+});
+```
+
+### deleteVoter
+
+Deletes a voter account (GDPR compliance).
+
+```typescript
+deleteVoter(voterID: string): void
+```
+
+<ParamField path="voterID" type="string" required>
+  ID of the voter to delete
+</ParamField>
+
+**Throws:**
+- `"Voter not found"` - Invalid voter ID
+
+**Notes:**
+- Permanently removes voter data from the system
+- Supports GDPR "right to be forgotten" compliance
+- Vote anonymity ensures ballots remain valid after deletion
+
+## Related Types
+
+### RegistrationStatus
+
+Enum representing voter registration states:
+- `PENDING` - Registration submitted, awaiting approval
+- `APPROVED` - Registration approved, can vote
+- `REJECTED` - Registration rejected, cannot vote
+
+## Validation Rules
+
+### Email Format
+
+Email addresses must match the pattern: `^[^\s@]+@[^\s@]+\.[^\s@]+$`
+
+**Valid examples:**
+- `user@example.com`
+- `john.doe@company.org`
+
+**Invalid examples:**
+- `invalid` (no @ symbol)
+- `user@domain` (no TLD)
+- `user @example.com` (contains spaces)
+
+### Password Requirements
+
+- Minimum length: 8 characters
+- No maximum length enforced
+- Passwords are stored as hashes in production

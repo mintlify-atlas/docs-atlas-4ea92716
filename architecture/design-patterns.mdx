@@ -1,0 +1,640 @@
+---
+title: Design Patterns
+description: Implementation of Repository, Strategy, Observer, Factory, and Adapter patterns in Consensus
+---
+
+## Overview
+
+Consensus leverages five key design patterns to achieve maintainability, extensibility, and testability. Each pattern solves a specific architectural challenge.
+
+## Pattern Summary
+
+| Pattern | Purpose | Location |
+|---------|---------|----------|
+| **Repository** | Abstract data access, enable testing | `src/repositories/` |
+| **Strategy** | Support multiple voting algorithms | `src/services/strategies/` |
+| **Observer** | Track election events, enable audit logging | `src/services/observers/` |
+| **Factory** | Create ballots based on election type | `src/services/factories/` |
+| **Adapter** | Ensure vote anonymity | `src/services/adapters/` |
+
+## 1. Repository Pattern
+
+### Problem
+
+Direct database access in business logic creates:
+- **Tight coupling** to database technology
+- **Difficult testing** (requires real database)
+- **Mixed concerns** (business logic + SQL)
+
+### Solution
+
+Repository pattern abstracts data access behind interfaces:
+
+```
+Service → IRepository ← Repository → Database
+         (interface)   (implementation)
+```
+
+### Implementation
+
+**Interface Definition:**
+```typescript
+// From src/repositories/interfaces/IVoterRepository.ts:3-10
+export interface IVoterRepository {
+    save(voter: Voter): void;
+    findById(voterID: string): Voter | null;
+    findByEmail(email: string): Voter | null;
+    update(voter: Voter): void;
+    delete(voterID: string): void;
+    findAll(): Voter[];
+}
+```
+
+**Concrete Implementation:**
+```typescript
+// From src/repositories/VoterRepository.ts:7-28
+export class VoterRepository implements IVoterRepository {
+    private db: Database.Database;
+
+    constructor(db?: Database.Database) {
+        this.db = db || DatabaseConnection.getInstance();
+    }
+
+    save(voter: Voter): void {
+        const stmt = this.db.prepare(`
+            INSERT INTO voters (voter_id, name, email, password_hash, 
+                                registration_status, registration_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `);
+
+        stmt.run(
+            voter.voterID,
+            voter.name,
+            voter.email,
+            voter.passwordHash,
+            voter.registrationStatus,
+            voter.registrationDate.toISOString()
+        );
+    }
+    // ... other methods
+}
+```
+
+**Object Mapping:**
+```typescript
+// From src/repositories/VoterRepository.ts:75-84
+private mapRowToVoter(row: any): Voter {
+    return new Voter(
+        row.voter_id,
+        row.name,
+        row.email,
+        row.password_hash,
+        row.registration_status as RegistrationStatus,
+        new Date(row.registration_date)
+    );
+}
+```
+
+### Benefits
+
+1. **Database Independence:** Swap SQLite for PostgreSQL by implementing new repositories
+2. **Testability:** Mock repositories for unit tests without database
+3. **Single Responsibility:** Repositories handle only data access
+4. **Type Safety:** Return domain entities, not raw database rows
+
+### Repository Instances
+
+- `VoterRepository` - Voter CRUD operations
+- `ElectionRepository` - Election management, find active/closed
+- `CandidateRepository` - Candidate CRUD, find by election
+- `BallotRepository` - Anonymous ballot storage
+- `VoterEligibilityRepository` - Track voting status
+- `VoteConfirmationRepository` - Store vote receipts
+- `AuditLogRepository` - Immutable event logs
+- `AdminRepository` - Admin user management
+
+## 2. Strategy Pattern
+
+### Problem
+
+Different election types require different vote counting algorithms:
+- **FPTP** - Simple plurality count
+- **AV** - Ranked choice with elimination rounds
+- **STV** - Proportional representation with quota calculation
+
+Hardcoding these in a single method creates unmaintainable conditionals.
+
+### Solution
+
+Define an interface for voting strategies and implement each algorithm separately:
+
+```
+VotingService → IVotingStrategy ← FPTPStrategy
+                                ← AVStrategy
+                                ← STVStrategy
+```
+
+### Implementation
+
+**Strategy Interface:**
+```typescript
+// From src/services/strategies/IVotingStrategy.ts:4-29
+export interface VoteResult {
+    candidateID: string;
+    candidateName: string;
+    votes: number;
+    percentage: number;
+    isWinner: boolean;
+    isTied?: boolean;
+}
+
+export interface IVotingStrategy {
+    /**
+     * Calculate election results using this voting mechanism
+     */
+    calculateResults(ballots: Ballot[], candidates: Candidate[]): VoteResult[];
+
+    /**
+     * Validate that a ballot is properly formed for this voting system
+     */
+    validateBallot(ballot: Ballot, candidateCount: number): boolean;
+}
+```
+
+**Concrete Strategy - FPTP:**
+```typescript
+// From src/services/strategies/FPTPStrategy.ts:5-53
+export class FPTPStrategy implements IVotingStrategy {
+    calculateResults(ballots: Ballot[], candidates: Candidate[]): VoteResult[] {
+        // Count votes for each candidate
+        const voteCounts = new Map<string, number>();
+        candidates.forEach((c) => voteCounts.set(c.candidateID, 0));
+
+        ballots.forEach((ballot) => {
+            // For FPTP, preferences array has single item
+            const candidateID = ballot.preferences[0];
+            const currentCount = voteCounts.get(candidateID) || 0;
+            voteCounts.set(candidateID, currentCount + 1);
+        });
+
+        const totalVotes = ballots.length;
+
+        // Create results
+        const results: VoteResult[] = candidates.map((candidate) => {
+            const votes = voteCounts.get(candidate.candidateID) || 0;
+            return {
+                candidateID: candidate.candidateID,
+                candidateName: candidate.name,
+                votes,
+                percentage: totalVotes > 0 ? (votes / totalVotes) * 100 : 0,
+                isWinner: false,
+            };
+        });
+
+        // Sort by votes descending
+        results.sort((a, b) => b.votes - a.votes);
+
+        // Check for ties at the top
+        if (results.length > 0 && results[0].votes > 0) {
+            const topVotes = results[0].votes;
+            const tiedCandidates = results.filter((r) => r.votes === topVotes);
+
+            if (tiedCandidates.length > 1) {
+                // Tie detected - flag for admin resolution
+                tiedCandidates.forEach((r) => {
+                    r.isTied = true;
+                    r.isWinner = false;
+                });
+            } else {
+                // Clear winner
+                results[0].isWinner = true;
+            }
+        }
+
+        return results;
+    }
+
+    validateBallot(ballot: Ballot, _candidateCount: number): boolean {
+        // FPTP requires single candidate selection
+        return ballot.preferences && ballot.preferences.length === 1;
+    }
+}
+```
+
+**Strategy Selection:**
+```typescript
+// From src/services/VotingService.ts:24-41
+export class VotingService {
+    private strategyMap: Map<ElectionType, IVotingStrategy>;
+
+    constructor(
+        private ballotRepository: IBallotRepository,
+        private eligibilityRepository: IVoterEligibilityRepository,
+        private confirmationRepository: IVoteConfirmationRepository,
+        private electionRepository: IElectionRepository,
+        private candidateRepository: ICandidateRepository
+    ) {
+        this.anonymousAdapter = new AnonymousBallotAdapter();
+        this.strategyMap = new Map();
+        this.strategyMap.set(ElectionType.FPTP, new FPTPStrategy());
+        this.strategyMap.set(ElectionType.STV, new STVStrategy());
+        this.strategyMap.set(ElectionType.AV, new AVStrategy());
+        this.strategyMap.set(ElectionType.PREFERENTIAL, new STVStrategy());
+    }
+}
+```
+
+**Strategy Usage:**
+```typescript
+// From src/services/VotingService.ts:157-178
+calculateResults(electionID: string): VoteResult[] {
+    const election = this.electionRepository.findById(electionID);
+    if (!election) {
+        throw new Error("Election not found");
+    }
+
+    if (election.status !== ElectionStatus.CLOSED) {
+        throw new Error("Results only available for closed elections");
+    }
+
+    const ballots = this.ballotRepository.findByElectionId(electionID);
+    const candidates = this.candidateRepository.findByElectionId(electionID);
+
+    const strategy = this.strategyMap.get(election.electionType);
+    if (!strategy) {
+        throw new Error(`No voting strategy for election type: ${election.electionType}`);
+    }
+
+    return strategy.calculateResults(ballots, candidates);
+}
+```
+
+### Benefits
+
+1. **Open/Closed Principle:** Add new voting systems without modifying existing code
+2. **Single Responsibility:** Each strategy handles one algorithm
+3. **Testability:** Test strategies in isolation
+4. **Runtime Selection:** Choose strategy based on election type
+
+### Available Strategies
+
+- **FPTPStrategy** - First Past The Post (simple majority)
+- **AVStrategy** - Alternative Vote (instant runoff)
+- **STVStrategy** - Single Transferable Vote (proportional)
+
+## 3. Observer Pattern
+
+### Problem
+
+When elections change state (DRAFT→ACTIVE→CLOSED), multiple systems need notification:
+- Audit log must record the change
+- Notifications might be sent to voters/admins
+- Future: Email triggers, webhooks, etc.
+
+Directly calling these systems from `ElectionService` creates tight coupling.
+
+### Solution
+
+Observer pattern allows objects to subscribe to election events:
+
+```
+ElectionService → ElectionEventEmitter → ElectionAuditLogger
+                                       → ElectionNotifier
+                                       → (future observers)
+```
+
+### Implementation
+
+**Observer Interface:**
+```typescript
+// From src/services/observers/interfaces/IElectionObserver.ts:1-5
+export interface IElectionObserver {
+    onElectionStateChange(event: ElectionEvent): void;
+}
+```
+
+**Event Emitter (Subject):**
+```typescript
+// From src/services/observers/ElectionEventEmitter.ts:6-33
+export class ElectionEventEmitter {
+    private observers: Set<IElectionObserver> = new Set();
+
+    subscribe(observer: IElectionObserver): void {
+        this.observers.add(observer);
+    }
+
+    unsubscribe(observer: IElectionObserver): void {
+        this.observers.delete(observer);
+    }
+
+    /** Builds the event and fans it out to all observers */
+    notify(election: Election, previousStatus: ElectionStatus, 
+           newStatus: ElectionStatus): void {
+        const event = new ElectionEvent(election, previousStatus, newStatus);
+
+        for (const observer of this.observers) {
+            try {
+                observer.onElectionStateChange(event);
+            } catch (error) {
+                console.error(`[ElectionEventEmitter] Observer error:`, error);
+            }
+        }
+    }
+
+    getObserverCount(): number {
+        return this.observers.size;
+    }
+}
+```
+
+**Concrete Observer - Audit Logger:**
+```typescript
+// From src/services/observers/ElectionAuditLogger.ts:13-30
+export class ElectionAuditLogger implements IElectionObserver {
+    constructor(private auditLogRepository: IAuditLogRepository) {}
+
+    onElectionStateChange(event: ElectionEvent): void {
+        const entry: AuditEntry = {
+            electionID: event.election.electionID,
+            electionName: event.election.name,
+            previousStatus: event.previousStatus,
+            newStatus: event.newStatus,
+            timestamp: event.timestamp,
+        };
+
+        this.auditLogRepository.save(entry);
+
+        console.log(
+            `[Audit] Election "${entry.electionName}" transitioned: ` +
+            `${entry.previousStatus} -> ${entry.newStatus}`
+        );
+    }
+}
+```
+
+**Observer Registration:**
+```typescript
+// From src/web/server.ts:172-177
+const electionEventEmitter = new ElectionEventEmitter();
+const auditLogger = new ElectionAuditLogger(auditLogRepository);
+const electionNotifier = new ElectionNotifier();
+electionEventEmitter.subscribe(auditLogger);
+electionEventEmitter.subscribe(electionNotifier);
+```
+
+**Triggering Events:**
+```typescript
+// From src/services/ElectionService.ts:173-178
+activateElection(electionID: string): void {
+    const election = this.electionRepository.findById(electionID);
+    // ... validation ...
+    
+    const previousStatus = election.status;
+    election.status = ElectionStatus.ACTIVE;
+    this.electionRepository.update(election);
+
+    // Notify all observers
+    this.eventEmitter.notify(election, previousStatus, ElectionStatus.ACTIVE);
+}
+```
+
+### Benefits
+
+1. **Loose Coupling:** `ElectionService` doesn't know about audit logging
+2. **Extensibility:** Add new observers without changing existing code
+3. **Error Isolation:** One failing observer doesn't break others
+4. **Runtime Configuration:** Subscribe/unsubscribe observers dynamically
+
+### Current Observers
+
+- `ElectionAuditLogger` - Records state changes to audit log
+- `ElectionNotifier` - Placeholder for future notification system
+
+## 4. Factory Pattern
+
+### Problem
+
+Creating ballots requires complex logic:
+- FPTP elections need single-choice ballots
+- STV/AV elections need ranked-choice ballots
+- Each ballot needs unique ID and timestamp
+- Input validation varies by election type
+
+### Solution
+
+Centralize ballot creation logic in a factory:
+
+```typescript
+// From src/services/factories/BallotFactory.ts:5-44
+export class BallotFactory {
+    static createBallot(
+        electionType: ElectionType,
+        electionID: string,
+        candidateID?: string,
+        preferences?: string[]
+    ): Ballot {
+        const ballotID = randomUUID();
+        const castAt = new Date();
+
+        switch (electionType) {
+            case ElectionType.FPTP:
+                if (!candidateID) {
+                    throw new Error("FPTP ballots require a candidateID");
+                }
+                // Store as single-item preferences array
+                return new Ballot(ballotID, electionID, [candidateID], castAt);
+
+            case ElectionType.STV:
+            case ElectionType.AV:
+            case ElectionType.PREFERENTIAL:
+                if (!preferences || preferences.length === 0) {
+                    throw new Error(`${electionType} ballots require preferences`);
+                }
+                return new Ballot(ballotID, electionID, preferences, castAt);
+
+            default:
+                throw new Error(`Unknown election type: ${electionType}`);
+        }
+    }
+
+    static validateBallotData(
+        electionType: ElectionType, 
+        candidateID?: string, 
+        preferences?: string[]
+    ): boolean {
+        // Validation logic per election type
+        // Check for duplicates in preferences
+        // ...
+    }
+}
+```
+
+### Benefits
+
+1. **Centralized Logic:** One place to handle ballot creation rules
+2. **Type Safety:** Ensures ballots are valid for their election type
+3. **Consistent IDs:** Guarantees unique identifiers
+4. **Validation:** Prevents invalid ballots from being created
+
+## 5. Adapter Pattern
+
+### Problem
+
+**Critical Requirement:** Votes must be **anonymous** - no linkage between voter and ballot.
+
+However, voters need **confirmation** they voted successfully.
+
+These two requirements seem contradictory.
+
+### Solution
+
+Adapter pattern transforms voter input into two separate outputs:
+
+1. **Anonymous Ballot** - Contains vote choices, no voter ID
+2. **Vote Confirmation** - Contains voter ID, no vote choices
+
+```
+VoteInput → AnonymousBallotAdapter → { ballot, confirmation }
+```
+
+### Implementation
+
+```typescript
+// From src/services/adapters/AnonymousBallotAdapter.ts:6-47
+export interface VoteInput {
+    voter: Voter;
+    electionID: string;
+    candidateID?: string;
+    preferences?: string[];
+}
+
+export interface AnonymousVoteOutput {
+    ballot: Ballot;
+    confirmation: VoteConfirmation;
+}
+
+export class AnonymousBallotAdapter {
+    adapt(voteInput: VoteInput): AnonymousVoteOutput {
+        const now = new Date();
+
+        // Determine preferences array
+        let preferences: string[];
+        if (voteInput.preferences && voteInput.preferences.length > 0) {
+            preferences = voteInput.preferences;
+        } else if (voteInput.candidateID) {
+            preferences = [voteInput.candidateID];
+        } else {
+            throw new Error("Either candidateID or preferences must be provided");
+        }
+
+        // Create anonymous ballot - no reference to voter
+        const ballot = new Ballot(
+            randomUUID(), 
+            voteInput.electionID, 
+            preferences, 
+            now
+        );
+
+        // Create confirmation for voter - no vote details
+        const confirmation = new VoteConfirmation(
+            randomUUID(), 
+            voteInput.voter.voterID, 
+            voteInput.electionID, 
+            now
+        );
+
+        return { ballot, confirmation };
+    }
+
+    verifyAnonymity(ballot: Ballot): boolean {
+        // Verify ballot has no voter identifying information
+        return ballot.ballotID !== undefined 
+            && ballot.electionID !== undefined 
+            && ballot.castAt !== undefined;
+    }
+}
+```
+
+**Usage in VotingService:**
+```typescript
+// From src/services/VotingService.ts:109-133
+const voteInput: VoteInput = {
+    voter,
+    electionID: dto.electionID,
+    candidateID: dto.candidateID,
+    preferences: dto.preferences,
+};
+
+const { ballot: anonymousBallot, confirmation } = 
+    this.anonymousAdapter.adapt(voteInput);
+
+// Verify ballot is truly anonymous
+if (!this.anonymousAdapter.verifyAnonymity(anonymousBallot)) {
+    throw new Error("Ballot anonymity verification failed");
+}
+
+// Store anonymous ballot (no link to voter)
+this.ballotRepository.save(anonymousBallot);
+
+// Store confirmation (for voter's records, no vote details)
+this.confirmationRepository.save(confirmation);
+
+// Mark voter as having voted
+this.eligibilityRepository.markVoted(dto.voterID, dto.electionID);
+
+return confirmation;
+```
+
+### Benefits
+
+1. **Privacy Guarantee:** Structural impossibility to link votes to voters
+2. **Voter Assurance:** Confirmation proves participation
+3. **Double-Vote Prevention:** Eligibility tracking without compromising anonymity
+4. **Audit Trail:** Separate audit logs without vote details
+
+## Pattern Interactions
+
+Patterns work together to create a cohesive architecture:
+
+```
+Controller
+    ↓
+Service (uses Strategy, Observer, Factory, Adapter)
+    ↓
+Repository (abstracts data access)
+    ↓
+Database
+```
+
+**Example Flow - Casting a Vote:**
+
+1. **Controller** receives HTTP request
+2. **VotingService** orchestrates:
+   - **Repository** fetches election and voter
+   - **Factory** creates ballot
+   - **Strategy** validates ballot format
+   - **Adapter** separates ballot from confirmation
+   - **Repository** saves both separately
+3. **Observer** logs the event (if vote triggers election close)
+
+## Why These Patterns?
+
+| Pattern | Chosen Because |
+|---------|----------------|
+| **Repository** | Database abstraction is essential for testing and future scaling |
+| **Strategy** | Multiple voting algorithms are core to the product |
+| **Observer** | Audit logging is legally required; future integrations likely |
+| **Factory** | Ballot creation rules are complex and type-dependent |
+| **Adapter** | Vote anonymity is a hard requirement that needs architectural enforcement |
+
+## Anti-Patterns Avoided
+
+- **God Objects:** Services are focused on single responsibilities
+- **Anemic Domain Model:** Entities contain business logic, not just data
+- **Singleton Abuse:** Only used for database connection (justified)
+- **Magic Strings:** Enums for all status values
+- **Tight Coupling:** Dependency injection throughout
+
+## Next Steps
+
+- [Data Layer](/architecture/data-layer) - Repository implementations and database schema

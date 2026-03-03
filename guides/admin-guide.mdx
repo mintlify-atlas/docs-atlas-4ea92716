@@ -1,0 +1,397 @@
+---
+title: Administrator Guide
+description: Complete guide for administrators managing the Consensus e-voting platform
+---
+
+This guide covers all administrative functions in the Consensus platform, from managing voters to overseeing elections and viewing results.
+
+## Admin Dashboard Overview
+
+The admin dashboard provides a central overview of your e-voting system at `/admin/dashboard`.
+
+### Dashboard Statistics
+
+Your dashboard displays key metrics:
+- **Total Elections**: All elections in the system (draft, active, and closed)
+- **Active Elections**: Currently open elections accepting votes
+- **Total Voters**: All registered voters
+- **Total Votes**: Sum of all votes cast across all elections
+
+### Admin Navigation
+
+The admin sidebar provides quick access to:
+- **Dashboard**: Overview and statistics
+- **Elections**: Manage all elections
+- **Voters**: Review and approve voter registrations
+- **Results**: View election outcomes
+- **Settings**: Configure platform settings
+- **Admin Users**: Manage administrator accounts
+
+## Managing Voters
+
+Access voter management at `/admin/voters`.
+
+### Viewing Registered Voters
+
+The voters page shows all registered users with:
+- Name and email
+- Registration status (Pending, Approved, Rejected)
+- Registration date
+- Quick action buttons
+
+### Filtering Voters
+
+Use the filter tabs to view:
+- **All**: Every registered voter
+- **Pending**: Registrations awaiting approval
+- **Approved**: Voters who can participate in elections
+- **Rejected**: Registrations that were declined
+
+### Search Functionality
+
+Use the search bar to find voters by:
+- Name
+- Email address
+- Any text in their profile
+
+### Approving Voter Registrations
+
+<Steps>
+  <Step title="Navigate to Voters">
+    Go to `/admin/voters` from the admin sidebar.
+  </Step>
+  
+  <Step title="Filter Pending Voters">
+    Click the "Pending" tab to see registrations awaiting approval.
+  </Step>
+  
+  <Step title="Review Voter Details">
+    Click the eye icon to view detailed information about a voter:
+    - Full name
+    - Email address
+    - Registration date
+    - Voter ID
+  </Step>
+  
+  <Step title="Approve or Reject">
+    From the voters list or detail page:
+    - Click the **green check icon** to approve
+    - Click the **red X icon** to reject
+    
+    The action takes effect immediately.
+  </Step>
+</Steps>
+
+<Tip>
+Approved voters can immediately participate in any active elections. Rejected voters cannot vote and will see a notice on their dashboard.
+</Tip>
+
+<Note>
+If auto-approval is enabled in settings, new registrations are automatically approved and won't appear in the pending list.
+</Note>
+
+### Viewing Voter Details
+
+Click on any voter to access their detail page (`/admin/voters/:id`) showing:
+- Complete registration information
+- Current status
+- Registration timestamp
+- Voter ID
+- Action buttons to approve/reject
+
+## Managing Elections
+
+For detailed information on creating and managing elections, see the [Creating Elections Guide](/guides/creating-elections).
+
+Quick access: `/admin/elections`
+
+### Election Overview
+
+The elections management page displays:
+- All elections in your system
+- Filter tabs: All, Draft, Active, Closed
+- Search functionality
+- Create election button
+
+### Election Statuses
+
+**DRAFT**
+- Newly created election
+- Not visible to voters
+- Can add/remove candidates
+- Can be activated when ready
+
+**ACTIVE**
+- Election is open for voting
+- Visible to approved voters
+- Automatically opens at start date
+- Automatically closes at end date
+- Cannot modify candidates
+
+**CLOSED**
+- Voting has ended
+- Results are calculated
+- Results visible to all users
+- Cannot be reopened
+
+### Quick Election Actions
+
+From the elections list, you can:
+- **View Details**: Eye icon - see full election information
+- **Public View**: External link icon - preview what voters see
+
+## Viewing Results
+
+Access election results at `/admin/results`.
+
+### Results Dashboard
+
+The results page shows:
+- All elections with their status
+- Vote counts for each election
+- Winners (for closed elections)
+- Tie indicators
+- Top 3 candidates per election
+
+### Election Results Details
+
+Click on any closed election to view:
+- Full candidate rankings
+- Vote totals and percentages
+- Winner determination
+- Tie resolution information (if applicable)
+
+### Understanding Results by Election Type
+
+**First Past The Post (FPTP)**
+- Shows vote count per candidate
+- Candidate with most votes wins
+- Displays percentage of total votes
+
+**STV/AV/Preferential**
+- Shows preference distribution
+- Round-by-round elimination process
+- Transfer of votes between candidates
+- Final winner after all transfers
+
+### Handling Tied Elections
+
+When an election results in a tie:
+
+<Steps>
+  <Step title="Identify the Tie">
+    The election detail page will show a "Tie" indicator and list tied candidates.
+  </Step>
+  
+  <Step title="Choose Resolution Method">
+    Three options are available:
+    
+    **Random Selection**
+    - System randomly selects winner from tied candidates
+    - Fair and unbiased
+    - Immediate resolution
+    
+    **Manual Selection**
+    - Administrator manually chooses winner
+    - Requires selecting from tied candidates only
+    - Include notes to document decision
+    
+    **Recall Election**
+    - Declares no winner
+    - Indicates need for a new election
+    - No winner assigned
+  </Step>
+  
+  <Step title="Execute Resolution">
+    Submit your chosen resolution method. The decision is recorded with:
+    - Resolution type
+    - Winner (if applicable)
+    - Administrator who made the decision
+    - Timestamp
+    - Optional notes
+  </Step>
+</Steps>
+
+<Warning>
+Tie resolutions are permanent and cannot be changed once submitted.
+</Warning>
+
+## Administrative Settings
+
+Access platform settings at `/admin/management`.
+
+### Available Settings
+
+**Voter Registration**
+- **Signup Enabled**: Allow new voter registrations
+- **Login Enabled**: Allow voters to log in
+- **Auto-Approval**: Automatically approve new registrations
+
+**Guest Voting**
+- **Guest Voting Enabled**: Allow anonymous voting by IP address
+- Requires public IP addresses
+- Auto-creates guest accounts
+
+**Security**
+- **Turnstile (CAPTCHA)**: Enable bot protection
+- **Site Key**: Cloudflare Turnstile site key
+- **Secret Key**: Cloudflare Turnstile secret key
+
+<Note>
+Turnstile is automatically disabled in development and test environments.
+</Note>
+
+### Updating Settings
+
+<Steps>
+  <Step title="Navigate to Settings">
+    Go to `/admin/management` from the admin sidebar.
+  </Step>
+  
+  <Step title="Modify Desired Settings">
+    Toggle switches or enter configuration values.
+  </Step>
+  
+  <Step title="Save Changes">
+    Click "Save Settings" to apply changes immediately.
+  </Step>
+</Steps>
+
+<Warning>
+Disabling login or signup will prevent voters from accessing the platform. Use these features carefully during maintenance or between election periods.
+</Warning>
+
+## Managing Administrator Accounts
+
+Access at `/admin/admins`.
+
+### Viewing Administrators
+
+See all administrator accounts with:
+- Username
+- Email
+- Creation date
+- Last login
+
+### Creating New Administrators
+
+<Steps>
+  <Step title="Click Create Admin">
+    Click the "Create Administrator" button.
+  </Step>
+  
+  <Step title="Enter Details">
+    Provide:
+    - Username
+    - Email address
+    - Initial password
+  </Step>
+  
+  <Step title="Save Admin Account">
+    Submit the form to create the new administrator.
+  </Step>
+  
+  <Step title="Share Credentials Securely">
+    Provide the username and password to the new administrator through a secure channel.
+  </Step>
+</Steps>
+
+### Changing Your Password
+
+Navigate to `/admin/change-password` to update your admin password.
+
+<Steps>
+  <Step title="Go to Change Password">
+    Access from the admin sidebar or user menu.
+  </Step>
+  
+  <Step title="Enter Passwords">
+    Provide:
+    - Current password
+    - New password
+    - Confirm new password
+  </Step>
+  
+  <Step title="Submit Change">
+    Click "Update Password" to save.
+  </Step>
+</Steps>
+
+## Best Practices
+
+<Tip>
+**Security**
+- Use strong, unique passwords for admin accounts
+- Don't share admin credentials
+- Regularly review administrator accounts
+- Enable Turnstile CAPTCHA to prevent bot registrations
+- Log out after each admin session
+</Tip>
+
+<Tip>
+**Voter Management**
+- Review pending registrations promptly
+- Verify voter identities before approval if required
+- Consider enabling auto-approval for trusted communities
+- Monitor rejected voters for patterns
+</Tip>
+
+<Tip>
+**Election Management**
+- Test elections in DRAFT status before activating
+- Verify all candidates are added before activation
+- Set appropriate start and end dates
+- Monitor active elections for vote counts
+- Resolve ties promptly after elections close
+</Tip>
+
+<Tip>
+**Communication**
+- Inform voters when elections are created
+- Remind voters of upcoming election deadlines
+- Notify voters when registrations are approved
+- Announce results after tie resolution
+</Tip>
+
+## Troubleshooting
+
+### Can't access admin panel
+- Verify you're using the correct admin login at `/admin/login`
+- Check your admin credentials
+- Ensure your admin account hasn't been removed
+- Voters cannot access admin functions
+
+### Voter approvals not working
+- Refresh the page after clicking approve/reject
+- Check the voter's status in their detail page
+- Verify you're logged in as an administrator
+
+### Election won't activate
+- Ensure at least one candidate is added
+- Check that start/end dates are valid
+- Verify election is in DRAFT status
+- Start date must be before end date
+
+### Results not showing
+- Election must be CLOSED status
+- Wait for end date to pass (or close manually)
+- Verify votes were cast in the election
+- Check for calculation errors in system logs
+
+## Data & Privacy
+
+As an administrator, you have access to:
+- Voter registration information (name, email, status)
+- Election metadata (names, dates, candidates)
+- Vote counts and results
+
+You **cannot** see:
+- Who individual voters voted for
+- Specific ballot choices
+- Vote-to-voter mappings
+
+The system maintains ballot secrecy while providing vote confirmations.
+
+<Warning>
+Handle voter data responsibly and in accordance with GDPR and local privacy regulations.
+</Warning>
